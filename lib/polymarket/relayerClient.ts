@@ -10,7 +10,9 @@
  * - Execute CTF operations (split, merge, redeem, convert)
  */
 
-import { RelayClient } from '@polymarket/builder-relayer-client';
+// @polymarket/builder-relayer-client may not be published yet
+// Using dynamic import to handle missing package gracefully
+// import { RelayClient } from '@polymarket/builder-relayer-client';
 import { BuilderConfig, BuilderApiKeyCreds } from '@polymarket/builder-signing-sdk';
 import { ethers } from 'ethers';
 import type { WalletClient } from 'viem';
@@ -74,8 +76,19 @@ function getBuilderConfig(): BuilderConfig | undefined {
  * @param walletClient - Wagmi wallet client (converted to ethers signer)
  * @returns RelayClient instance or null if builder config is not available
  */
-export function initializeRelayerClient(walletClient: WalletClient): RelayClient | null {
+export async function initializeRelayerClient(walletClient: WalletClient): Promise<any> {
   try {
+    // Dynamic import to handle missing package gracefully
+    let RelayClient: any;
+    try {
+      const relayerModule = await import('@polymarket/builder-relayer-client');
+      RelayClient = relayerModule.RelayClient;
+    } catch (importError) {
+      console.warn('@polymarket/builder-relayer-client not found. Relayer features disabled.');
+      console.warn('If you need relayer features, ensure the package is installed: npm install @polymarket/builder-relayer-client');
+      return null;
+    }
+
     // Convert wagmi WalletClient to ethers Signer (required for RelayClient)
     const signer = walletClientToSigner(walletClient);
 
@@ -113,7 +126,7 @@ export function initializeRelayerClient(walletClient: WalletClient): RelayClient
 export async function deploySafeWalletViaRelayer(
   walletClient: WalletClient
 ): Promise<string> {
-  const relayerClient = initializeRelayerClient(walletClient);
+  const relayerClient = await initializeRelayerClient(walletClient);
 
   if (!relayerClient) {
     throw new Error('Relayer client not available. Builder credentials required.');
@@ -156,7 +169,7 @@ export async function approveTokenViaRelayer(
   spenderAddress: string,
   amount: bigint = ethers.constants.MaxUint256
 ): Promise<string> {
-  const relayerClient = initializeRelayerClient(walletClient);
+  const relayerClient = await initializeRelayerClient(walletClient);
 
   if (!relayerClient) {
     throw new Error('Relayer client not available. Builder credentials required.');
@@ -185,7 +198,15 @@ export async function approveTokenViaRelayer(
     ]);
 
     // Per Polymarket docs: Execute Safe transaction via relayer
-    const { OperationType, SafeTransaction } = await import('@polymarket/builder-relayer-client');
+    // Dynamic import to handle missing package
+    let OperationType: any, SafeTransaction: any;
+    try {
+      const relayerModule = await import('@polymarket/builder-relayer-client');
+      OperationType = relayerModule.OperationType;
+      SafeTransaction = relayerModule.SafeTransaction;
+    } catch (importError) {
+      throw new Error('@polymarket/builder-relayer-client not found. Please install: npm install @polymarket/builder-relayer-client');
+    }
     
     const approvalTx: SafeTransaction = {
       to: tokenAddress,
