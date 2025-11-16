@@ -79,9 +79,12 @@ function getBuilderConfig(): BuilderConfig | undefined {
 export async function initializeRelayerClient(walletClient: WalletClient): Promise<any> {
   try {
     // Dynamic import to handle missing package gracefully
+    // Using string-based import to prevent Next.js build-time analysis
     let RelayClient: any;
     try {
-      const relayerModule = await import('@polymarket/builder-relayer-client');
+      // Use Function constructor to prevent webpack from analyzing this import at build time
+      const importRelayer = new Function('return import("@polymarket/builder-relayer-client")');
+      const relayerModule = await importRelayer();
       RelayClient = relayerModule.RelayClient;
     } catch (importError) {
       console.warn('@polymarket/builder-relayer-client not found. Relayer features disabled.');
@@ -199,9 +202,11 @@ export async function approveTokenViaRelayer(
 
     // Per Polymarket docs: Execute Safe transaction via relayer
     // Dynamic import to handle missing package
+    // Using Function constructor to prevent webpack from analyzing this import at build time
     let OperationType: any, SafeTransaction: any;
     try {
-      const relayerModule = await import('@polymarket/builder-relayer-client');
+      const importRelayer = new Function('return import("@polymarket/builder-relayer-client")');
+      const relayerModule = await importRelayer();
       OperationType = relayerModule.OperationType;
       SafeTransaction = relayerModule.SafeTransaction;
     } catch (importError) {
