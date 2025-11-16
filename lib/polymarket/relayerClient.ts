@@ -10,12 +10,8 @@
  * - Execute CTF operations (split, merge, redeem, convert)
  */
 
-// NOTE: @polymarket/builder-relayer-client and @polymarket/builder-signing-sdk
-// are not yet published to npm. These features will be available once the packages are published.
-// For now, relayer features are disabled to prevent build errors.
-
-// import { RelayClient } from '@polymarket/builder-relayer-client';
-// import { BuilderConfig, BuilderApiKeyCreds } from '@polymarket/builder-signing-sdk';
+import { RelayClient } from '@polymarket/builder-relayer-client';
+import { BuilderConfig, BuilderApiKeyCreds } from '@polymarket/builder-signing-sdk';
 import { ethers } from 'ethers';
 import type { WalletClient } from 'viem';
 import { POLYGON_CHAIN_ID, POLYMARKET_RELAYER_URL } from '@/lib/constants';
@@ -31,27 +27,13 @@ const RELAYER_URL = POLYMARKET_RELAYER_URL;
  * Priority:
  * 1. Remote signing server (NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL) - RECOMMENDED
  * 2. Direct credentials (POLY_BUILDER_*) - Server-side only, less secure
- * 
- * NOTE: Relayer packages are not yet published to npm. This function returns undefined
- * until the packages are available.
  */
-function getBuilderConfig(): any {
+function getBuilderConfig(): BuilderConfig | undefined {
   // Client-side accessible: Signing server URL (for remote signing)
   // Per Polymarket docs: Use Builder Signing Server for secure remote signing
   // Format: http://localhost:5001/sign (local) or https://your-server.com/sign (production)
   const signingServerUrl = process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
 
-  // NOTE: Relayer packages are not yet published to npm
-  // Once @polymarket/builder-relayer-client and @polymarket/builder-signing-sdk are published,
-  // uncomment the code below and remove this return statement.
-  
-  console.warn('Relayer packages (@polymarket/builder-relayer-client, @polymarket/builder-signing-sdk) are not yet published to npm.');
-  console.warn('Relayer features (gasless transactions, Safe deployment) are temporarily disabled.');
-  console.warn('Once the packages are published, relayer features will be automatically enabled.');
-  
-  return undefined;
-
-  /* UNCOMMENT WHEN PACKAGES ARE PUBLISHED:
   // Priority 1: Remote signing (RECOMMENDED - more secure)
   if (signingServerUrl) {
     console.log('Using Builder Signing Server for remote signing:', signingServerUrl);
@@ -77,8 +59,12 @@ function getBuilderConfig(): any {
     });
   }
 
+  // No builder config - relayer features won't work
+  console.warn('Builder credentials not configured. Relayer features (gasless transactions, Safe deployment) will not be available.');
+  console.warn('To enable relayer features, either:');
+  console.warn('  1. Set NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL (recommended)');
+  console.warn('  2. Set POLY_BUILDER_API_KEY, POLY_BUILDER_SECRET, POLY_BUILDER_PASSPHRASE (server-side only)');
   return undefined;
-  */
 }
 
 /**
@@ -88,7 +74,7 @@ function getBuilderConfig(): any {
  * @param walletClient - Wagmi wallet client (converted to ethers signer)
  * @returns RelayClient instance or null if builder config is not available
  */
-export function initializeRelayerClient(walletClient: WalletClient): any {
+export function initializeRelayerClient(walletClient: WalletClient): RelayClient | null {
   try {
     // Convert wagmi WalletClient to ethers Signer (required for RelayClient)
     const signer = walletClientToSigner(walletClient);
@@ -101,16 +87,13 @@ export function initializeRelayerClient(walletClient: WalletClient): any {
       return null;
     }
 
-    // NOTE: RelayClient is not available until packages are published
     // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
-    // const client = new RelayClient(
-    //   RELAYER_URL,
-    //   POLYGON_CHAIN_ID,
-    //   signer,
-    //   builderConfig
-    // );
-    
-    throw new Error('Relayer packages are not yet published to npm. Please wait for package publication.');
+    const client = new RelayClient(
+      RELAYER_URL,
+      POLYGON_CHAIN_ID,
+      signer,
+      builderConfig
+    );
 
     console.log('Relayer client initialized successfully');
     return client;
