@@ -170,7 +170,7 @@ export async function approveTokenViaRelayer(
   walletClient: WalletClient,
   tokenAddress: string,
   spenderAddress: string,
-  amount: bigint = ethers.constants.MaxUint256
+  amount: bigint = BigInt(ethers.constants.MaxUint256.toString())
 ): Promise<string> {
   const relayerClient = await initializeRelayerClient(walletClient);
 
