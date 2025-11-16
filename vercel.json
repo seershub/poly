@@ -1,31 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
-  "outputDirectory": ".next",
   "framework": "nextjs",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "regions": ["iad1"],
-  "env": {
-    "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID": {
-      "description": "WalletConnect Cloud Project ID from https://cloud.walletconnect.com",
-      "value": ""
-    },
-    "NEXT_PUBLIC_GAMMA_API_URL": {
-      "description": "Polymarket Gamma API URL",
-      "value": "https://gamma-api.polymarket.com"
-    },
-    "NEXT_PUBLIC_CLOB_API_URL": {
-      "description": "Polymarket CLOB API URL",
-      "value": "https://clob.polymarket.com"
-    },
-    "NEXT_PUBLIC_DATA_API_URL": {
-      "description": "Polymarket Data API URL",
-      "value": "https://data-api.polymarket.com"
-    },
-    "NEXT_PUBLIC_CHAIN_ID": {
-      "description": "Polygon Chain ID",
-      "value": "137"
-    }
-  }
+  "outputDirectory": ".next"
 }
