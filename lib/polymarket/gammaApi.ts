@@ -7,65 +7,58 @@ import type {
   GammaEvent
 } from '@/types/polymarket';
 
-const gammaClient = axios.create({
-  baseURL: GAMMA_API_URL,
+// Use our Next.js API route instead of calling Gamma API directly (bypasses CORS)
+const API_BASE_URL = typeof window !== 'undefined' ? '/api' : 'http://localhost:3000/api';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   },
-  timeout: 15000, // 15 second timeout
+  timeout: 20000, // 20 second timeout
 });
 
 /**
  * Get sports metadata including tag IDs
  * Per Polymarket docs: /sports endpoint returns tag IDs for filtering
+ * Note: Currently not used, can be implemented via API route if needed
  */
 async function getSportsMetadata() {
-  try {
-    const response = await gammaClient.get('/sports');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching sports metadata:', error);
-    return [];
-  }
+  // TODO: Implement via API route if needed
+  return [];
 }
 
 /**
  * Get all soccer/football markets from Polymarket
- * FIXED: Using /events endpoint with correct parameters per Polymarket docs
+ * FIXED: Using server-side API route to bypass CORS
  *
  * Per docs:
  * - Use /events endpoint (more efficient than /markets)
- * - Use tag_id parameter (not tag)
  * - Use closed=false (not active=true)
  * - Events contain their associated markets
  */
 export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
   try {
-    console.log('Fetching soccer markets from Gamma API...');
+    console.log('Fetching soccer markets via API route...');
 
-    // Try multiple approaches to get sports markets
-
-    // Approach 1: Get all active events and filter for sports
-    const eventsResponse = await gammaClient.get('/events', {
+    // Try /events endpoint first (via our API route)
+    const eventsResponse = await apiClient.get('/markets', {
       params: {
-        closed: false,        // Only active events (per docs)
-        limit: 100,           // Get more results
-        offset: 0,            // Start from beginning
-        order: 'id',          // Order by ID
-        ascending: false,     // Newest first
+        endpoint: 'events',
+        closed: false,
+        limit: 100,
+        offset: 0,
       },
     });
 
-    console.log('Events API response:', {
+    console.log('API route response (events):', {
       status: eventsResponse.status,
       dataType: Array.isArray(eventsResponse.data) ? 'array' : typeof eventsResponse.data,
       count: Array.isArray(eventsResponse.data) ? eventsResponse.data.length : 0,
     });
 
     if (!eventsResponse.data) {
-      console.warn('Gamma API returned no data');
+      console.warn('API route returned no data');
       return getMockMarkets();
     }
 
@@ -105,15 +98,16 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
 
     // If no sports markets found, try direct markets endpoint
     console.log('No sports markets in events, trying /markets endpoint...');
-    const marketsResponse = await gammaClient.get('/markets', {
+    const marketsResponse = await apiClient.get('/markets', {
       params: {
+        endpoint: 'markets',
         closed: false,
         limit: 100,
         offset: 0,
       },
     });
 
-    console.log('Markets API response:', {
+    console.log('API route response (markets):', {
       status: marketsResponse.status,
       dataType: Array.isArray(marketsResponse.data) ? 'array' : typeof marketsResponse.data,
       count: Array.isArray(marketsResponse.data) ? marketsResponse.data.length : 0,
@@ -140,7 +134,7 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
     }
 
     // If still no markets, return mock data
-    console.warn('No sports markets found in Gamma API, using mock data');
+    console.warn('No sports markets found, using mock data');
     return getMockMarkets();
 
   } catch (error: any) {
@@ -158,23 +152,11 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
 
 /**
  * Get markets by specific tag
+ * TODO: Implement via API route if needed
  */
 export async function getMarketsByTag(tag: string): Promise<PolymarketMarket[]> {
-  try {
-    const response = await gammaClient.get<PolymarketMarket[]>('/markets', {
-      params: {
-        tag,
-        limit: 100,
-        active: true,
-        closed: false,
-      },
-    });
-
-    return Array.isArray(response.data) ? response.data : [];
-  } catch (error) {
-    console.error(`Error fetching markets for tag ${tag}:`, error);
-    return [];
-  }
+  console.warn('getMarketsByTag not yet implemented via API route');
+  return [];
 }
 
 /**
@@ -186,56 +168,38 @@ export async function getMarketsByLeague(leagueTag: string): Promise<PolymarketM
 
 /**
  * Get a single market by slug
+ * TODO: Implement via API route if needed
  */
 export async function getMarketBySlug(slug: string): Promise<PolymarketMarket | null> {
-  try {
-    const response = await gammaClient.get<PolymarketMarket>(`/markets/${slug}`);
-    return response.data;
-  } catch (error) {
-    console.error(`Error fetching market ${slug}:`, error);
-    return null;
-  }
+  console.warn('getMarketBySlug not yet implemented via API route');
+  return null;
 }
 
 /**
  * Get all sports tags available
+ * TODO: Implement via API route if needed
  */
 export async function getSportsTags(): Promise<string[]> {
-  try {
-    const response = await gammaClient.get<GammaSportsResponse>('/sports');
-    return response.data?.tags || [];
-  } catch (error) {
-    console.error('Error fetching sports tags:', error);
-    return [];
-  }
+  console.warn('getSportsTags not yet implemented via API route');
+  return [];
 }
 
 /**
  * Get market details by ID
+ * TODO: Implement via API route if needed
  */
 export async function getMarketById(marketId: string): Promise<PolymarketMarket | null> {
-  try {
-    const response = await gammaClient.get<PolymarketMarket>(`/markets/${marketId}`);
-    return response.data;
-  } catch (error) {
-    console.error(`Error fetching market ${marketId}:`, error);
-    return null;
-  }
+  console.warn('getMarketById not yet implemented via API route');
+  return null;
 }
 
 /**
  * Search markets by query
+ * TODO: Implement via API route if needed
  */
 export async function searchMarkets(query: string): Promise<PolymarketMarket[]> {
-  try {
-    const response = await gammaClient.get<PolymarketMarket[]>('/search', {
-      params: { q: query },
-    });
-    return Array.isArray(response.data) ? response.data : [];
-  } catch (error) {
-    console.error(`Error searching markets for "${query}":`, error);
-    return [];
-  }
+  console.warn('searchMarkets not yet implemented via API route');
+  return [];
 }
 
 /**

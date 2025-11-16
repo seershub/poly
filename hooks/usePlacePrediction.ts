@@ -95,19 +95,46 @@ export function usePlacePrediction() {
       const cost = size * price;
       const requiredUsdc = parseUnits(cost.toFixed(USDC_DECIMALS), USDC_DECIMALS);
 
+      console.log('Checking USDC balance:', {
+        cost,
+        requiredUsdc: requiredUsdc.toString(),
+        balance: balance ? balance.value.toString() : 'null',
+        formatted: balance?.formatted,
+        symbol: balance?.symbol,
+      });
+
       // Check USDC balance
-      if (!balance || BigInt(balance.value) < requiredUsdc) {
+      if (!balance) {
+        throw new Error('USDC balance not loaded. Please ensure you are connected to Polygon network.');
+      }
+
+      const currentBalance = BigInt(balance.value);
+
+      if (currentBalance < requiredUsdc) {
+        const formattedBalance = Number(currentBalance) / 10 ** USDC_DECIMALS;
         throw new Error(
-          `Insufficient USDC balance. Required: ${cost.toFixed(2)} USDC`
+          `Insufficient USDC balance. You have ${formattedBalance.toFixed(2)} USDC but need ${cost.toFixed(2)} USDC`
         );
       }
+
+      console.log('✅ USDC balance check passed');
 
       // Check allowance
       const currentAllowance = allowance ? BigInt(allowance) : BigInt(0);
 
+      console.log('Checking USDC allowance:', {
+        currentAllowance: currentAllowance.toString(),
+        requiredUsdc: requiredUsdc.toString(),
+        needsApproval: currentAllowance < requiredUsdc,
+      });
+
       if (currentAllowance < requiredUsdc) {
         // Need to approve first
-        console.log('Approving USDC for CLOB contract...');
+        console.log('⚠️ Insufficient allowance, requesting approval...');
+        console.log('Approving USDC for CLOB contract:', {
+          spender: POLYMARKET_CLOB_ADDRESS,
+          amount: requiredUsdc.toString(),
+        });
 
         // Request approval
         approveUsdc({
@@ -119,8 +146,10 @@ export function usePlacePrediction() {
 
         // Wait for approval (this is handled by useWaitForTransactionReceipt)
         // In a real implementation, we should wait for the approval before continuing
-        throw new Error('APPROVAL_REQUIRED');
+        throw new Error('Please approve USDC spending in your wallet, then try again.');
       }
+
+      console.log('✅ USDC allowance check passed');
 
       // Initialize CLOB client
       const clobClient = initializeClobClient(credentials);
@@ -144,12 +173,7 @@ export function usePlacePrediction() {
       queryClient.invalidateQueries({ queryKey: ['polymarket-markets'] });
     },
     onError: (error) => {
-      if (error.message === 'APPROVAL_REQUIRED') {
-        // This is expected, user needs to approve first
-        console.log('Waiting for USDC approval...');
-      } else {
-        console.error('Error placing prediction:', error);
-      }
+      console.error('Error placing prediction:', error);
     },
   });
 
