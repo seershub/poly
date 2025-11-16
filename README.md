@@ -151,15 +151,59 @@ const awayTeam = market.outcomes[1]; // e.g., "Chelsea"
 
 ### Vercel (Recommended)
 
-1. Push your code to GitHub
-2. Import the project in Vercel
-3. Add environment variables in Vercel dashboard
-4. Deploy
+#### Step 1: Get WalletConnect Project ID
 
-### Build for Production
+1. Go to [WalletConnect Cloud](https://cloud.walletconnect.com)
+2. Sign up or login
+3. Create a new project
+4. Copy your Project ID
+
+#### Step 2: Deploy to Vercel
+
+1. **Push code to GitHub** (already done if you see this)
+
+2. **Import project in Vercel**
+   - Go to [Vercel Dashboard](https://vercel.com/new)
+   - Import your GitHub repository
+   - Framework Preset: **Next.js** (auto-detected)
+
+3. **Configure Environment Variables**
+
+   Go to **Project Settings → Environment Variables** and add:
+
+   | Variable | Value | Required |
+   |----------|-------|----------|
+   | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Your WalletConnect Project ID | ✅ YES |
+   | `NEXT_PUBLIC_GAMMA_API_URL` | `https://gamma-api.polymarket.com` | ❌ Optional (has default) |
+   | `NEXT_PUBLIC_CLOB_API_URL` | `https://clob.polymarket.com` | ❌ Optional (has default) |
+   | `NEXT_PUBLIC_DATA_API_URL` | `https://data-api.polymarket.com` | ❌ Optional (has default) |
+   | `NEXT_PUBLIC_CHAIN_ID` | `137` | ❌ Optional (has default) |
+
+   **CRITICAL**: Only `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is REQUIRED!
+
+4. **Deploy**
+   - Click "Deploy"
+   - Wait 2-3 minutes
+   - Your app will be live!
+
+#### Step 3: Verify Deployment
+
+1. Open your deployed URL
+2. Click "Connect Wallet"
+3. Connect with MetaMask or WalletConnect
+4. Browse matches and test predictions
+
+### Build for Production (Self-Hosted)
 
 ```bash
+# 1. Set environment variables
+cp .env.example .env.local
+# Edit .env.local and add your WALLETCONNECT_PROJECT_ID
+
+# 2. Build
 npm run build
+
+# 3. Start
 npm start
 ```
 
