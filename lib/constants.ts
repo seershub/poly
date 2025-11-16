@@ -6,9 +6,9 @@ export const POLYMARKET_COLLATERAL_TOKEN = '0x2791Bca1f2de4661ED88A30C99A7a9449A
 // Polymarket API Endpoints
 // Use environment variables if available, otherwise use defaults
 // NEXT_PUBLIC_ prefix makes these available on both client and server
-export const GAMMA_API_URL = (process.env.NEXT_PUBLIC_GAMMA_API_URL || 'https://gamma-api.polymarket.com') as const;
-export const CLOB_API_URL = (process.env.NEXT_PUBLIC_CLOB_API_URL || 'https://clob.polymarket.com') as const;
-export const DATA_API_URL = (process.env.NEXT_PUBLIC_DATA_API_URL || 'https://data-api.polymarket.com') as const;
+export const GAMMA_API_URL: string = process.env.NEXT_PUBLIC_GAMMA_API_URL || 'https://gamma-api.polymarket.com';
+export const CLOB_API_URL: string = process.env.NEXT_PUBLIC_CLOB_API_URL || 'https://clob.polymarket.com';
+export const DATA_API_URL: string = process.env.NEXT_PUBLIC_DATA_API_URL || 'https://data-api.polymarket.com';
 
 // Chain Configuration
 // Use environment variable if available, otherwise use default (Polygon Mainnet)
