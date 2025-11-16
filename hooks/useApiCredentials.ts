@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWalletClient, useAccount } from 'wagmi';
 import { generateApiCredentials } from '@/lib/polymarket/clobClient';
 import type { ApiCredentials } from '@/types/polymarket';
+import { useEffect } from 'react';
 
 /**
  * Hook to generate and manage Polymarket API credentials
@@ -44,15 +45,17 @@ export function useApiCredentials() {
         throw new Error('Wallet not connected');
       }
 
+      if (!address) {
+        throw new Error('No address found');
+      }
+
       const credentials = await generateApiCredentials(walletClient);
 
       // Store in localStorage (in production, use secure backend)
-      if (address) {
-        localStorage.setItem(
-          `poly-creds-${address}`,
-          JSON.stringify(credentials)
-        );
-      }
+      localStorage.setItem(
+        `poly-creds-${address}`,
+        JSON.stringify(credentials)
+      );
 
       return credentials;
     },
@@ -62,11 +65,19 @@ export function useApiCredentials() {
     },
   });
 
+  // Auto-generate credentials when wallet connects (if not already generated)
+  useEffect(() => {
+    if (address && walletClient && !credentialsQuery.data && !generateMutation.isPending) {
+      // Auto-generate on first connection
+      generateMutation.mutate();
+    }
+  }, [address, walletClient, credentialsQuery.data, generateMutation.isPending]);
+
   return {
     credentials: credentialsQuery.data,
     isLoading: credentialsQuery.isLoading,
     isGenerating: generateMutation.isPending,
-    generateCredentials: generateMutation.mutate,
+    generateCredentials: () => generateMutation.mutate(),
     error: credentialsQuery.error || generateMutation.error,
   };
 }

@@ -6,6 +6,17 @@ import type { WalletClient } from 'viem';
 import { walletClientToSigner } from '@/lib/ethersAdapter';
 
 /**
+ * Builder configuration (optional)
+ * Only needed if participating in Polymarket Builder Grant Program
+ */
+interface BuilderConfig {
+  builderApiKey?: string;
+  builderSecret?: string;
+  builderPassphrase?: string;
+  signingServerUrl?: string;
+}
+
+/**
  * CRITICAL: Generate API credentials using wagmi WalletClient (NOT private key)
  * This function converts the wagmi wallet client to an ethers signer
  * and uses it to generate/derive API credentials.
@@ -15,7 +26,7 @@ export async function generateApiCredentials(
 ): Promise<ApiCredentials> {
   try {
     // Convert wagmi WalletClient to ethers Signer
-    const signer = await walletClientToSigner(walletClient);
+    const signer = walletClientToSigner(walletClient);
 
     // Create a temporary CLOB client instance to derive API credentials
     // Pass the signer as the third parameter (constructor params: host, chainId, signer)
@@ -41,10 +52,18 @@ export async function generateApiCredentials(
 
 /**
  * Initialize CLOB client with credentials
+ *
+ * @param credentials - User API credentials (generated from wallet)
+ *
+ * Note: Builder configuration support can be added later if needed
+ * for Polymarket Builder Grant Program participation
  */
-export function initializeClobClient(credentials: ApiCredentials): ClobClient {
-  // Constructor: (host, chainId, signer?, creds?, ...)
+export function initializeClobClient(
+  credentials: ApiCredentials
+): ClobClient {
+  // Constructor: (host, chainId, signer?, creds?)
   // We pass undefined for signer and pass creds as the 4th parameter
+
   return new ClobClient(
     CLOB_API_URL,
     POLYGON_CHAIN_ID,
