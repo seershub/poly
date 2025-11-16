@@ -10,6 +10,8 @@ const nextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       '@polymarket/builder-relayer-client': false,
+      // Ignore @react-native-async-storage/async-storage (not needed for web)
+      '@react-native-async-storage/async-storage': false,
     };
     
     return config;
