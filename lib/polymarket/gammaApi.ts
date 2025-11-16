@@ -8,10 +8,9 @@ import type {
 } from '@/types/polymarket';
 
 // Use our Next.js API route instead of calling Gamma API directly (bypasses CORS)
-const API_BASE_URL = typeof window !== 'undefined' ? '/api' : 'http://localhost:3000/api';
-
+// Client-side only - do not call during SSR
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -38,66 +37,16 @@ async function getSportsMetadata() {
  * - Events contain their associated markets
  */
 export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
+  // Always return mock data for now - client-side only
+  if (typeof window === 'undefined') {
+    console.log('[SSR] Returning empty array during server-side rendering');
+    return [];
+  }
+
   try {
     console.log('Fetching soccer markets via API route...');
 
-    // Try /events endpoint first (via our API route)
-    const eventsResponse = await apiClient.get('/markets', {
-      params: {
-        endpoint: 'events',
-        closed: false,
-        limit: 100,
-        offset: 0,
-      },
-    });
-
-    console.log('API route response (events):', {
-      status: eventsResponse.status,
-      dataType: Array.isArray(eventsResponse.data) ? 'array' : typeof eventsResponse.data,
-      count: Array.isArray(eventsResponse.data) ? eventsResponse.data.length : 0,
-    });
-
-    if (!eventsResponse.data) {
-      console.warn('API route returned no data');
-      return getMockMarkets();
-    }
-
-    // Events endpoint returns array of events, each containing markets
-    const events = Array.isArray(eventsResponse.data) ? eventsResponse.data : [];
-
-    // Extract markets from events and filter for sports-related ones
-    const allMarkets: PolymarketMarket[] = [];
-
-    for (const event of events) {
-      // Check if event has markets
-      if (event.markets && Array.isArray(event.markets)) {
-        // Filter for sports-related markets by checking tags or question
-        const sportsKeywords = ['soccer', 'football', 'nfl', 'nba', 'mlb', 'premier league', 'la liga', 'champions league', 'world cup'];
-
-        for (const market of event.markets) {
-          const question = (market.question || '').toLowerCase();
-          const description = (market.description || '').toLowerCase();
-          const tags = market.tags || [];
-
-          const isSports =
-            sportsKeywords.some(keyword => question.includes(keyword) || description.includes(keyword)) ||
-            tags.some((tag: string) => sportsKeywords.some(keyword => tag.toLowerCase().includes(keyword)));
-
-          if (isSports) {
-            allMarkets.push(market);
-          }
-        }
-      }
-    }
-
-    console.log(`Found ${allMarkets.length} sports markets`);
-
-    if (allMarkets.length > 0) {
-      return allMarkets;
-    }
-
-    // If no sports markets found, try direct markets endpoint
-    console.log('No sports markets in events, trying /markets endpoint...');
+    // Try /markets endpoint directly (simpler, more reliable)
     const marketsResponse = await apiClient.get('/markets', {
       params: {
         endpoint: 'markets',
@@ -107,34 +56,43 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
       },
     });
 
-    console.log('API route response (markets):', {
+    console.log('API route response:', {
       status: marketsResponse.status,
       dataType: Array.isArray(marketsResponse.data) ? 'array' : typeof marketsResponse.data,
       count: Array.isArray(marketsResponse.data) ? marketsResponse.data.length : 0,
     });
 
-    const markets = Array.isArray(marketsResponse.data) ? marketsResponse.data : [];
+    // Check if we got data
+    if (!marketsResponse.data || !Array.isArray(marketsResponse.data) || marketsResponse.data.length === 0) {
+      console.warn('No data from API, using mock markets');
+      return getMockMarkets();
+    }
 
-    // Filter for sports
+    const markets = marketsResponse.data;
+
+    // Filter for sports markets
+    const sportsKeywords = ['soccer', 'football', 'nfl', 'nba', 'mlb', 'nhl', 'premier league', 'la liga', 'champions league', 'world cup', 'uefa', 'fifa'];
+
     const sportsMarkets = markets.filter((market: any) => {
       const question = (market.question || '').toLowerCase();
       const description = (market.description || '').toLowerCase();
-      const tags = market.tags || [];
+      const tags = Array.isArray(market.tags) ? market.tags : [];
 
-      const sportsKeywords = ['soccer', 'football', 'nfl', 'nba', 'mlb', 'premier league', 'la liga', 'champions league', 'world cup'];
-
-      return sportsKeywords.some(keyword => question.includes(keyword) || description.includes(keyword)) ||
-             tags.some((tag: string) => sportsKeywords.some(keyword => tag.toLowerCase().includes(keyword)));
+      return sportsKeywords.some(keyword =>
+        question.includes(keyword) ||
+        description.includes(keyword) ||
+        tags.some((tag: string) => tag.toLowerCase().includes(keyword))
+      );
     });
 
-    console.log(`Found ${sportsMarkets.length} sports markets from /markets endpoint`);
+    console.log(`Found ${sportsMarkets.length} sports markets out of ${markets.length} total markets`);
 
     if (sportsMarkets.length > 0) {
       return sportsMarkets;
     }
 
-    // If still no markets, return mock data
-    console.warn('No sports markets found, using mock data');
+    // No sports markets found, use mock data
+    console.warn('No sports markets found in API response, using mock data');
     return getMockMarkets();
 
   } catch (error: any) {
@@ -144,7 +102,7 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
       status: error.response?.status,
     });
 
-    // Always return mock data on error so users can see the UI
+    // Always return mock data on error
     console.log('Returning mock data due to error');
     return getMockMarkets();
   }
