@@ -49,10 +49,14 @@ export function usePlacePrediction() {
   const { credentials } = useApiCredentials();
   const queryClient = useQueryClient();
 
-  // Get USDC balance
-  const { data: balance } = useBalance({
+  // Get USDC balance - with enabled check and refetch
+  const { data: balance, refetch: refetchBalance, isLoading: isLoadingBalance } = useBalance({
     address,
     token: POLYGON_USDC_ADDRESS,
+    query: {
+      enabled: !!address, // Only fetch when address is available
+      refetchInterval: 5000, // Refetch every 5 seconds
+    },
   });
 
   // Get USDC allowance for CLOB contract
@@ -92,26 +96,37 @@ export function usePlacePrediction() {
       const { tokenId, side, size, price } = params;
 
       // Calculate required USDC (cost = shares * price)
+      // Per Polymarket docs: cost = size (shares) * price per share
       const cost = size * price;
+      
+      // Convert cost to USDC units (6 decimals)
+      // Per Polymarket docs: Use parseUnits with proper decimal precision
       const requiredUsdc = parseUnits(cost.toFixed(USDC_DECIMALS), USDC_DECIMALS);
 
-      console.log('Checking USDC balance:', {
-        cost,
-        requiredUsdc: requiredUsdc.toString(),
-        balance: balance ? balance.value.toString() : 'null',
-        formatted: balance?.formatted,
-        symbol: balance?.symbol,
-      });
-
-      // Check USDC balance
-      if (!balance) {
-        throw new Error('USDC balance not loaded. Please ensure you are connected to Polygon network.');
+      // Ensure balance is loaded (refetch if needed)
+      let currentBalance = balance;
+      if (!currentBalance || isLoadingBalance) {
+        const { data: refreshedBalance } = await refetchBalance();
+        currentBalance = refreshedBalance || balance;
       }
 
-      const currentBalance = BigInt(balance.value);
+      console.log('Checking USDC balance (per Polymarket docs):', {
+        cost,
+        requiredUsdc: requiredUsdc.toString(),
+        balance: currentBalance ? currentBalance.value.toString() : 'null',
+        formatted: currentBalance?.formatted,
+        symbol: currentBalance?.symbol,
+      });
 
-      if (currentBalance < requiredUsdc) {
-        const formattedBalance = Number(currentBalance) / 10 ** USDC_DECIMALS;
+      // Check USDC balance - per Polymarket requirements
+      if (!currentBalance) {
+        throw new Error('USDC balance not loaded. Please ensure you are connected to Polygon network and have USDC in your wallet.');
+      }
+
+      const balanceValue = BigInt(currentBalance.value);
+
+      if (balanceValue < requiredUsdc) {
+        const formattedBalance = Number(balanceValue) / 10 ** USDC_DECIMALS;
         throw new Error(
           `Insufficient USDC balance. You have ${formattedBalance.toFixed(2)} USDC but need ${cost.toFixed(2)} USDC`
         );

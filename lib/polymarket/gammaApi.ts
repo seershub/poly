@@ -74,8 +74,9 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
 
     const markets = marketsResponse.data;
 
-    // Enhanced sports keywords for better filtering
+    // Enhanced sports keywords for better filtering - Soccer and Basketball
     const sportsKeywords = [
+      // Soccer/Football
       'soccer', 'football', 'futbol',
       'premier league', 'premier-league', 'premierleague',
       'la liga', 'la-liga', 'laliga',
@@ -85,12 +86,18 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
       'europa league', 'europa-league', 'europaleague',
       'world cup', 'world-cup', 'worldcup',
       'uefa', 'fifa',
-      'nfl', 'nba', 'mlb', 'nhl', // Other sports for broader coverage
+      // Basketball
+      'nba', 'basketball', 'basket-ball', 'basket ball',
+      'ncaa', 'college basketball', 'march madness',
+      'euroleague', 'euro-league', 'euro league',
+      'fiba', 'world cup basketball',
+      'playoffs', 'playoff', 'finals', 'championship',
+      // General
       'match', 'game', 'vs', 'versus',
     ];
 
     // Filter for sports markets with improved matching
-    const sportsMarkets = markets.filter((market: any) => {
+    let sportsMarkets = markets.filter((market: any) => {
       if (!market) return false;
 
       const question = (market.question || '').toLowerCase();
@@ -117,6 +124,28 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
     });
 
     console.log(`Found ${sportsMarkets.length} sports markets out of ${markets.length} total markets`);
+
+    // CRITICAL: Filter for major matches only (high volume or liquidity)
+    // Only show markets with significant trading activity
+    const MIN_VOLUME = 1000; // Minimum $1000 volume
+    const MIN_LIQUIDITY = 500; // Minimum $500 liquidity
+
+    sportsMarkets = sportsMarkets.filter((market: any) => {
+      const volume = market.volumeNum || parseFloat(market.volume || '0');
+      const liquidity = market.liquidityNum || parseFloat(market.liquidity || '0');
+      
+      // Show market if it has significant volume OR liquidity
+      return volume >= MIN_VOLUME || liquidity >= MIN_LIQUIDITY;
+    });
+
+    // Sort by volume (descending) to show biggest matches first
+    sportsMarkets.sort((a: any, b: any) => {
+      const volumeA = a.volumeNum || parseFloat(a.volume || '0');
+      const volumeB = b.volumeNum || parseFloat(b.volume || '0');
+      return volumeB - volumeA;
+    });
+
+    console.log(`Filtered to ${sportsMarkets.length} major sports markets (volume >= $${MIN_VOLUME} or liquidity >= $${MIN_LIQUIDITY})`);
 
     if (sportsMarkets.length > 0) {
       return sportsMarkets;

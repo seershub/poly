@@ -81,8 +81,11 @@ export async function generateApiCredentials(
 
 /**
  * Initialize CLOB client with credentials and optional builder configuration
+ * 
+ * Per Polymarket docs: ClobClient constructor signature:
+ * new ClobClient(host: string, chainId: number, signer?: Signer, creds?: ApiCredentials, builderConfig?: BuilderConfig)
  *
- * @param credentials - User API credentials (generated from wallet)
+ * @param credentials - User API credentials (generated from wallet via deriveApiKey)
  *
  * Builder configuration is automatically loaded from environment variables:
  * - POLY_BUILDER_API_KEY
@@ -96,15 +99,17 @@ export async function generateApiCredentials(
 export function initializeClobClient(
   credentials: ApiCredentials
 ): ClobClient {
-  // Constructor: (host, chainId, signer?, creds?, builderConfig?)
-  // We pass undefined for signer, creds as 4th parameter, and builderConfig as 5th
+  // Per Polymarket docs: ClobClient constructor
+  // signer is optional when using API credentials
+  // creds should be passed as 4th parameter
+  // builderConfig is optional 5th parameter
 
   const builderConfig = getBuilderConfig();
 
   return new ClobClient(
     CLOB_API_URL,
     POLYGON_CHAIN_ID,
-    undefined, // signer (optional)
+    undefined, // signer (optional - not needed when using API credentials)
     {
       key: credentials.apiKey,
       secret: credentials.apiSecret,
@@ -116,7 +121,14 @@ export function initializeClobClient(
 
 /**
  * Place a market order (buy/sell shares)
- * CRITICAL: Uses 'size' (shares) NOT 'amount' (USDC)
+ * 
+ * Per Polymarket docs:
+ * - Uses 'size' (shares) NOT 'amount' (USDC)
+ * - price: Limit price per share (0-1 range)
+ * - size: Number of shares to buy/sell
+ * - side: BUY or SELL
+ * 
+ * CRITICAL: Order must be signed before posting to CLOB
  */
 export async function placePrediction(params: {
   clobClient: ClobClient;
@@ -124,15 +136,19 @@ export async function placePrediction(params: {
   tokenId: string;
   side: 'BUY' | 'SELL';
   size: number; // Number of shares
-  price: number; // Limit price (use current price for market order)
+  price: number; // Limit price per share (0-1 range)
 }): Promise<PlacedOrder> {
   try {
     const { clobClient, walletClient, tokenId, side, size, price } = params;
 
-    // Convert wagmi WalletClient to ethers Signer
+    // Convert wagmi WalletClient to ethers Signer (required for order signing)
     const signer = walletClientToSigner(walletClient);
 
-    // Create order (UserOrder type)
+    // Per Polymarket docs: Create UserOrder object
+    // tokenID: The condition token ID for the market outcome
+    // price: Limit price (0-1 range, e.g., 0.65 = $0.65 per share)
+    // size: Number of shares
+    // side: BUY or SELL
     const userOrder = {
       tokenID: tokenId,
       price,
@@ -140,10 +156,11 @@ export async function placePrediction(params: {
       side: side === 'BUY' ? Side.BUY : Side.SELL,
     };
 
-    // Create and sign the order
+    // Per Polymarket docs: Create and sign the order
+    // createOrder signs the order using the signer
     const signedOrder = await clobClient.createOrder(userOrder);
 
-    // Post the order to the CLOB
+    // Per Polymarket docs: Post the signed order to the CLOB
     // orderType defaults to OrderType.GTC (Good Till Cancel)
     const orderResponse = await clobClient.postOrder(signedOrder);
 
