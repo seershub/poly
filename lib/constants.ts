@@ -4,12 +4,15 @@ export const POLYMARKET_CLOB_ADDRESS = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B898
 export const POLYMARKET_COLLATERAL_TOKEN = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const; // USDC
 
 // Polymarket API Endpoints
-export const GAMMA_API_URL = 'https://gamma-api.polymarket.com' as const;
-export const CLOB_API_URL = 'https://clob.polymarket.com' as const;
-export const DATA_API_URL = 'https://data-api.polymarket.com' as const;
+// Use environment variables if available, otherwise use defaults
+// NEXT_PUBLIC_ prefix makes these available on both client and server
+export const GAMMA_API_URL = (process.env.NEXT_PUBLIC_GAMMA_API_URL || 'https://gamma-api.polymarket.com') as const;
+export const CLOB_API_URL = (process.env.NEXT_PUBLIC_CLOB_API_URL || 'https://clob.polymarket.com') as const;
+export const DATA_API_URL = (process.env.NEXT_PUBLIC_DATA_API_URL || 'https://data-api.polymarket.com') as const;
 
 // Chain Configuration
-export const POLYGON_CHAIN_ID = 137;
+// Use environment variable if available, otherwise use default (Polygon Mainnet)
+export const POLYGON_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '137');
 
 // Default Order Configuration
 export const DEFAULT_FEE_RATE_BPS = 0; // 0 basis points

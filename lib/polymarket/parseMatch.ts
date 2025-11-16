@@ -10,6 +10,7 @@ export function parsePolymarketMatch(market: PolymarketMarket): ParsedMatch | nu
   try {
     // Validate market has the required data
     if (!market || !market.outcomes || market.outcomes.length < 2) {
+      console.warn('Invalid market data:', { hasMarket: !!market, outcomesCount: market?.outcomes?.length });
       return null;
     }
 
@@ -21,23 +22,63 @@ export function parsePolymarketMatch(market: PolymarketMarket): ParsedMatch | nu
     // Parse tokens for outcome data
     const tokens = market.tokens || [];
 
+    // Get token IDs - try multiple sources
+    // 1. clobTokenIds array (if available)
+    // 2. tokens array with token_id field
+    // 3. tokens array with id field
+    let yesTokenId = market.clobTokenIds?.[0] || '';
+    let noTokenId = market.clobTokenIds?.[1] || '';
+
     // Get YES outcome (first team/outcome)
-    const yesToken = tokens.find(t => t.outcome === market.outcomes[0]);
-    const yesTokenId = market.clobTokenIds?.[0] || '';
-
+    const yesToken = tokens.find(t => {
+      const tokenOutcome = typeof t === 'object' ? t.outcome : null;
+      return tokenOutcome === market.outcomes[0] || tokenOutcome === homeTeam;
+    });
+    
     // Get NO outcome (second team/outcome)
-    const noToken = tokens.find(t => t.outcome === market.outcomes[1]);
-    const noTokenId = market.clobTokenIds?.[1] || '';
+    const noToken = tokens.find(t => {
+      const tokenOutcome = typeof t === 'object' ? t.outcome : null;
+      return tokenOutcome === market.outcomes[1] || tokenOutcome === awayTeam;
+    });
 
-    // Parse prices from outcomePrices or tokens
-    const yesPrice = yesToken?.price || parseFloat(market.outcomePrices?.[0] || '0.5');
-    const noPrice = noToken?.price || parseFloat(market.outcomePrices?.[1] || '0.5');
+    // Extract token IDs from tokens if clobTokenIds not available
+    if (!yesTokenId && yesToken && typeof yesToken === 'object') {
+      yesTokenId = (yesToken as any).token_id || (yesToken as any).id || '';
+    }
+    if (!noTokenId && noToken && typeof noToken === 'object') {
+      noTokenId = (noToken as any).token_id || (noToken as any).id || '';
+    }
 
-    // Extract league from tags
-    const league = extractLeagueFromTags(market.tags || []);
+    // Parse prices from multiple sources (tokens, outcomePrices, or default)
+    const yesPrice = yesToken && typeof yesToken === 'object' && 'price' in yesToken
+      ? (typeof yesToken.price === 'number' ? yesToken.price : parseFloat(String(yesToken.price)))
+      : parseFloat(market.outcomePrices?.[0] || '0.5');
+    
+    const noPrice = noToken && typeof noToken === 'object' && 'price' in noToken
+      ? (typeof noToken.price === 'number' ? noToken.price : parseFloat(String(noToken.price)))
+      : parseFloat(market.outcomePrices?.[1] || '0.5');
 
-    // Parse match date
-    const matchDate = market.endDate ? new Date(market.endDate) : new Date();
+    // Extract league from tags (handle both string array and object array)
+    const tags = market.tags || [];
+    const tagStrings = tags.map(tag => 
+      typeof tag === 'string' ? tag : (typeof tag === 'object' && tag !== null ? (tag as any).name || (tag as any).tag || String(tag) : String(tag))
+    );
+    const league = extractLeagueFromTags(tagStrings);
+
+    // Parse match date - try multiple date fields
+    let matchDate = new Date();
+    if (market.endDate) {
+      matchDate = new Date(market.endDate);
+    } else if (market.endDateIso) {
+      matchDate = new Date(market.endDateIso);
+    } else if ((market as any).end_date) {
+      matchDate = new Date((market as any).end_date);
+    }
+    
+    // Validate date
+    if (isNaN(matchDate.getTime())) {
+      matchDate = new Date(); // Fallback to current date
+    }
 
     const parsedMatch: ParsedMatch = {
       id: market.id,

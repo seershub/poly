@@ -31,13 +31,14 @@ async function getSportsMetadata() {
  * Get all soccer/football markets from Polymarket
  * FIXED: Using server-side API route to bypass CORS
  *
- * Per docs:
- * - Use /events endpoint (more efficient than /markets)
- * - Use closed=false (not active=true)
- * - Events contain their associated markets
+ * Per Polymarket docs:
+ * - Use /markets endpoint for flat list of markets (simpler)
+ * - Use /events endpoint for event-based grouping (more complex)
+ * - Use closed=false to get active markets
+ * - Filter by tags when possible for better performance
  */
 export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
-  // Always return mock data for now - client-side only
+  // Return empty array during SSR
   if (typeof window === 'undefined') {
     console.log('[SSR] Returning empty array during server-side rendering');
     return [];
@@ -46,13 +47,16 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
   try {
     console.log('Fetching soccer markets via API route...');
 
-    // Try /markets endpoint directly (simpler, more reliable)
+    // Use /markets endpoint with sports tags if available
+    // Polymarket API supports tag filtering for better results
     const marketsResponse = await apiClient.get('/markets', {
       params: {
         endpoint: 'markets',
         closed: false,
-        limit: 100,
+        limit: 200, // Increase limit to get more markets
         offset: 0,
+        // Try to filter by sports tags if API supports it
+        // tags: 'soccer,football', // Uncomment if API supports tag filtering
       },
     });
 
@@ -70,19 +74,46 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
 
     const markets = marketsResponse.data;
 
-    // Filter for sports markets
-    const sportsKeywords = ['soccer', 'football', 'nfl', 'nba', 'mlb', 'nhl', 'premier league', 'la liga', 'champions league', 'world cup', 'uefa', 'fifa'];
+    // Enhanced sports keywords for better filtering
+    const sportsKeywords = [
+      'soccer', 'football', 'futbol',
+      'premier league', 'premier-league', 'premierleague',
+      'la liga', 'la-liga', 'laliga',
+      'bundesliga', 'serie a', 'serie-a', 'seriea',
+      'ligue 1', 'ligue-1', 'ligue1',
+      'champions league', 'champions-league', 'championsleague',
+      'europa league', 'europa-league', 'europaleague',
+      'world cup', 'world-cup', 'worldcup',
+      'uefa', 'fifa',
+      'nfl', 'nba', 'mlb', 'nhl', // Other sports for broader coverage
+      'match', 'game', 'vs', 'versus',
+    ];
 
+    // Filter for sports markets with improved matching
     const sportsMarkets = markets.filter((market: any) => {
+      if (!market) return false;
+
       const question = (market.question || '').toLowerCase();
       const description = (market.description || '').toLowerCase();
-      const tags = Array.isArray(market.tags) ? market.tags : [];
+      const tags = Array.isArray(market.tags) ? market.tags.map((t: any) => 
+        typeof t === 'string' ? t.toLowerCase() : (t.name || t).toLowerCase()
+      ) : [];
 
-      return sportsKeywords.some(keyword =>
-        question.includes(keyword) ||
-        description.includes(keyword) ||
-        tags.some((tag: string) => tag.toLowerCase().includes(keyword))
-      );
+      // Check if any keyword matches
+      const matchesKeyword = sportsKeywords.some(keyword => {
+        const lowerKeyword = keyword.toLowerCase();
+        return question.includes(lowerKeyword) ||
+               description.includes(lowerKeyword) ||
+               tags.some((tag: string) => tag.includes(lowerKeyword));
+      });
+
+      // Additional check: if market has exactly 2 outcomes, it might be a match
+      const hasTwoOutcomes = market.outcomes && Array.isArray(market.outcomes) && market.outcomes.length === 2;
+
+      // Additional check: if market is active and not closed
+      const isActive = market.active && !market.closed;
+
+      return matchesKeyword && hasTwoOutcomes && isActive;
     });
 
     console.log(`Found ${sportsMarkets.length} sports markets out of ${markets.length} total markets`);

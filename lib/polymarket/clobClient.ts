@@ -8,11 +8,19 @@ import { walletClientToSigner } from '@/lib/ethersAdapter';
 /**
  * Get builder configuration from environment variables
  * Only needed if participating in Polymarket Builder Grant Program
+ * 
+ * NOTE: Builder credentials (POLY_BUILDER_*) are server-side only and will be undefined
+ * in client-side code. This is intentional - builder config is optional and only used
+ * when available on the server. For client-side usage, builder config will be undefined.
  */
 function getBuilderConfig() {
-  const builderApiKey = process.env.POLY_BUILDER_API_KEY;
-  const builderSecret = process.env.POLY_BUILDER_SECRET;
-  const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;
+  // Server-side only: Builder credentials without NEXT_PUBLIC_ prefix
+  // These are only available in server-side code (API routes, server components)
+  const builderApiKey = typeof window === 'undefined' ? process.env.POLY_BUILDER_API_KEY : undefined;
+  const builderSecret = typeof window === 'undefined' ? process.env.POLY_BUILDER_SECRET : undefined;
+  const builderPassphrase = typeof window === 'undefined' ? process.env.POLY_BUILDER_PASSPHRASE : undefined;
+  
+  // Client-side accessible: Signing server URL (if using remote signing)
   const signingServerUrl = process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
 
   // If signing server URL is provided, use remote signing
