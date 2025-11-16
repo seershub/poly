@@ -65,12 +65,12 @@ export async function getProxyWalletAddress(
         functionName: 'getAddress',
         args: [
           [eoaAddress], // owners: single owner (1 of 1 multisig)
-          1n, // threshold: 1 signature required
+          BigInt(1), // threshold: 1 signature required
           '0x0000000000000000000000000000000000000000', // to: zero address
           '0x', // data: empty
           '0x0000000000000000000000000000000000000000', // fallbackHandler: zero address
           '0x0000000000000000000000000000000000000000', // paymentToken: zero address
-          0n, // payment: 0
+          BigInt(0), // payment: 0
           '0x0000000000000000000000000000000000000000', // paymentReceiver: zero address
         ],
       });
