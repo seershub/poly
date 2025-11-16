@@ -23,25 +23,33 @@ const RELAYER_URL = POLYMARKET_RELAYER_URL;
 /**
  * Get builder configuration from environment variables
  * Per Polymarket docs: Builder credentials are required for relayer access
+ * 
+ * Priority:
+ * 1. Remote signing server (NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL) - RECOMMENDED
+ * 2. Direct credentials (POLY_BUILDER_*) - Server-side only, less secure
  */
 function getBuilderConfig(): BuilderConfig | undefined {
-  // Server-side only: Builder credentials without NEXT_PUBLIC_ prefix
-  const builderApiKey = typeof window === 'undefined' ? process.env.POLY_BUILDER_API_KEY : undefined;
-  const builderSecret = typeof window === 'undefined' ? process.env.POLY_BUILDER_SECRET : undefined;
-  const builderPassphrase = typeof window === 'undefined' ? process.env.POLY_BUILDER_PASSPHRASE : undefined;
-  
   // Client-side accessible: Signing server URL (for remote signing)
+  // Per Polymarket docs: Use Builder Signing Server for secure remote signing
+  // Format: http://localhost:5001/sign (local) or https://your-server.com/sign (production)
   const signingServerUrl = process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
 
-  // If signing server URL is provided, use remote signing (more secure)
+  // Priority 1: Remote signing (RECOMMENDED - more secure)
   if (signingServerUrl) {
+    console.log('Using Builder Signing Server for remote signing:', signingServerUrl);
     return new BuilderConfig({
       remoteBuilderConfig: { url: signingServerUrl },
     });
   }
 
-  // If builder credentials are provided, use local signing
+  // Priority 2: Direct credentials (server-side only, less secure)
+  // Server-side only: Builder credentials without NEXT_PUBLIC_ prefix
+  const builderApiKey = typeof window === 'undefined' ? process.env.POLY_BUILDER_API_KEY : undefined;
+  const builderSecret = typeof window === 'undefined' ? process.env.POLY_BUILDER_SECRET : undefined;
+  const builderPassphrase = typeof window === 'undefined' ? process.env.POLY_BUILDER_PASSPHRASE : undefined;
+
   if (builderApiKey && builderSecret && builderPassphrase) {
+    console.warn('Using direct builder credentials (server-side only). Consider using Builder Signing Server for better security.');
     const builderCreds: BuilderApiKeyCreds = {
       key: builderApiKey,
       secret: builderSecret,
@@ -54,6 +62,9 @@ function getBuilderConfig(): BuilderConfig | undefined {
 
   // No builder config - relayer features won't work
   console.warn('Builder credentials not configured. Relayer features (gasless transactions, Safe deployment) will not be available.');
+  console.warn('To enable relayer features, either:');
+  console.warn('  1. Set NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL (recommended)');
+  console.warn('  2. Set POLY_BUILDER_API_KEY, POLY_BUILDER_SECRET, POLY_BUILDER_PASSPHRASE (server-side only)');
   return undefined;
 }
 
