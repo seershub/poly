@@ -23,6 +23,25 @@ import { walletClientToSigner } from '@/lib/ethersAdapter';
 const RELAYER_URL = POLYMARKET_RELAYER_URL;
 
 /**
+ * Type definitions per Polymarket docs
+ * https://docs.polymarket.com/developers/builders/relayer-client#typescript-types
+ */
+export interface SafeTransaction {
+  to: string;
+  operation: number; // OperationType.Call (0) or OperationType.DelegateCall (1)
+  data: string;
+  value: string;
+}
+
+/**
+ * OperationType enum per Polymarket docs
+ */
+export enum OperationType {
+  Call = 0,
+  DelegateCall = 1,
+}
+
+/**
  * Get builder configuration from environment variables
  * Per Polymarket docs: Builder credentials are required for relayer access
  * 
@@ -201,21 +220,10 @@ export async function approveTokenViaRelayer(
     ]);
 
     // Per Polymarket docs: Execute Safe transaction via relayer
-    // Dynamic import to handle missing package
-    // Using Function constructor to prevent webpack from analyzing this import at build time
-    let OperationType: any, SafeTransaction: any;
-    try {
-      const importRelayer = new Function('return import("@polymarket/builder-relayer-client")');
-      const relayerModule = await importRelayer();
-      OperationType = relayerModule.OperationType;
-      SafeTransaction = relayerModule.SafeTransaction;
-    } catch (importError) {
-      throw new Error('@polymarket/builder-relayer-client not found. Please install: npm install @polymarket/builder-relayer-client');
-    }
-    
+    // Using our own type definitions (per Polymarket docs interface)
     const approvalTx: SafeTransaction = {
       to: tokenAddress,
-      operation: OperationType.Call,
+      operation: OperationType.Call, // OperationType.Call = 0
       data: approvalData,
       value: '0',
     };
