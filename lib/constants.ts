@@ -17,6 +17,10 @@ export const GAMMA_API_URL: string = process.env.NEXT_PUBLIC_GAMMA_API_URL || 'h
 export const CLOB_API_URL: string = process.env.NEXT_PUBLIC_CLOB_API_URL || 'https://clob.polymarket.com';
 export const DATA_API_URL: string = process.env.NEXT_PUBLIC_DATA_API_URL || 'https://data-api.polymarket.com';
 
+// Polymarket Relayer URL
+// Per Polymarket docs: https://docs.polymarket.com/developers/builders/relayer-client
+export const POLYMARKET_RELAYER_URL: string = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com/';
+
 // Chain Configuration
 // Use environment variable if available, otherwise use default (Polygon Mainnet)
 export const POLYGON_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '137');

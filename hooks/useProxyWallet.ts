@@ -46,14 +46,22 @@ export function useProxyWallet() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Mutation to create proxy wallet
+  // Mutation to create proxy wallet via Polymarket Relayer (gasless)
   const createProxyMutation = useMutation({
     mutationFn: async (walletType: 'metamask' | 'magiclink' = 'metamask') => {
       if (!address || !walletClient || !publicClient) {
         throw new Error('Wallet not connected');
       }
 
-      // Ensure proxy wallet exists (create if needed)
+      // Per Polymarket docs: Use Relayer Client for gasless Safe Wallet deployment
+      // First check if proxy wallet already exists
+      const existingProxy = await getProxyWalletAddress(address, publicClient);
+      if (existingProxy) {
+        return existingProxy;
+      }
+
+      // Deploy new proxy wallet via Relayer (gasless)
+      // This will use Polymarket Relayer Client if builder credentials are configured
       const proxyAddress = await ensureProxyWallet(address, publicClient, walletClient, walletType);
       return proxyAddress;
     },

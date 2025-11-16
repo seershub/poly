@@ -98,8 +98,8 @@ export async function getProxyWalletAddress(
 }
 
 /**
- * Deploy a proxy wallet for the user
- * Per Polymarket docs: Proxy wallets are 1 of 1 multisig wallets
+ * Deploy a proxy wallet for the user via Polymarket Relayer
+ * Per Polymarket docs: Use Relayer Client for gasless Safe Wallet deployment
  * 
  * @param eoaAddress - The EOA address that will own the proxy wallet
  * @param walletClient - Wagmi wallet client for contract writes
@@ -112,25 +112,30 @@ export async function deployProxyWallet(
   walletType: 'metamask' | 'magiclink' = 'metamask'
 ): Promise<Address> {
   try {
-    console.log('Deploying proxy wallet:', { eoaAddress, walletType });
+    console.log('Deploying proxy wallet via Polymarket Relayer:', { eoaAddress, walletType });
     
-    // Per Polymarket docs:
-    // - MetaMask users: Use Gnosis Safe Factory (0xaacfeea03eb1561c4e67d661e40682bd20e3541b)
-    // - MagicLink users: Use Polymarket Proxy Factory (0xaB45c54AB0c941a2F231C04C3f49182e1A254052)
-    
-    const factoryAddress = walletType === 'metamask' 
-      ? POLYMARKET_GNOSIS_SAFE_FACTORY 
-      : POLYMARKET_PROXY_FACTORY;
-    
-    // TODO: Implement proxy wallet deployment
-    // This requires:
-    // 1. Calling the factory contract's createProxy function
-    // 2. Setting up a 1 of 1 multisig with the EOA as the owner
-    // 3. Waiting for deployment transaction
-    // 4. Returning the new proxy wallet address
-    
-    // For now, we'll throw an error indicating this needs to be implemented
-    throw new Error('Proxy wallet deployment not yet implemented. Please use Polymarket.com to create your proxy wallet first.');
+    // Per Polymarket docs: Use Relayer Client for gasless Safe Wallet deployment
+    // This is the recommended approach as Polymarket pays for gas fees
+    try {
+      const { deploySafeWalletViaRelayer } = await import('./relayerClient');
+      const safeAddress = await deploySafeWalletViaRelayer(walletClient);
+      console.log('Safe Wallet deployed via Relayer:', safeAddress);
+      return safeAddress as Address;
+    } catch (relayerError) {
+      console.warn('Relayer deployment failed, falling back to direct deployment:', relayerError);
+      
+      // Fallback: Direct factory deployment (user pays gas)
+      // Per Polymarket docs:
+      // - MetaMask users: Use Gnosis Safe Factory (0xaacfeea03eb1561c4e67d661e40682bd20e3541b)
+      // - MagicLink users: Use Polymarket Proxy Factory (0xaB45c54AB0c941a2F231C04C3f49182e1A254052)
+      
+      const factoryAddress = walletType === 'metamask' 
+        ? POLYMARKET_GNOSIS_SAFE_FACTORY 
+        : POLYMARKET_PROXY_FACTORY;
+      
+      // TODO: Implement direct factory deployment if relayer is not available
+      throw new Error('Proxy wallet deployment via Relayer failed. Please ensure builder credentials are configured. Fallback direct deployment not yet implemented.');
+    }
     
   } catch (error) {
     console.error('Error deploying proxy wallet:', error);
