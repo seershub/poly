@@ -12,36 +12,84 @@
  * - Transactions can be relayed by relayers on the gas station network
  */
 
-import { type Address, type WalletClient, getAddress } from 'viem';
+import { type Address, type WalletClient, type PublicClient, getAddress } from 'viem';
 import { POLYMARKET_GNOSIS_SAFE_FACTORY, POLYMARKET_PROXY_FACTORY } from '@/lib/constants';
+
+// Gnosis Safe Factory ABI (simplified - for proxy wallet lookup)
+const GNOSIS_SAFE_FACTORY_ABI = [
+  {
+    name: 'getAddress',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owners', type: 'address[]' },
+      { name: 'threshold', type: 'uint256' },
+      { name: 'to', type: 'address' },
+      { name: 'data', type: 'bytes' },
+      { name: 'fallbackHandler', type: 'address' },
+      { name: 'paymentToken', type: 'address' },
+      { name: 'payment', type: 'uint256' },
+      { name: 'paymentReceiver', type: 'address' },
+    ],
+    outputs: [{ name: 'proxy', type: 'address' }],
+  },
+] as const;
 
 /**
  * Check if a proxy wallet exists for the given EOA address
  * Per Polymarket docs: Each user has their own proxy wallet address
  * 
  * @param eoaAddress - The EOA (Externally Owned Account) address (MetaMask/MagicLink)
- * @param walletClient - Wagmi wallet client for contract reads
+ * @param publicClient - Viem public client for contract reads
  * @returns The proxy wallet address if it exists, null otherwise
  */
 export async function getProxyWalletAddress(
   eoaAddress: Address,
-  walletClient: WalletClient
+  publicClient: PublicClient
 ): Promise<Address | null> {
   try {
     // Per Polymarket docs: Proxy wallets are deployed via factory contracts
     // We need to check both factories (Gnosis Safe for MetaMask, Polymarket Proxy for MagicLink)
     
-    // TODO: Implement proxy wallet address lookup
-    // This requires calling the factory contracts to check if a proxy wallet exists
-    // For now, we'll return null and let the user deploy one if needed
-    
     console.log('Checking for proxy wallet:', { eoaAddress });
     
-    // Note: In a full implementation, we would:
-    // 1. Call Gnosis Safe Factory to check if proxy exists for MetaMask users
-    // 2. Call Polymarket Proxy Factory to check if proxy exists for MagicLink users
-    // 3. Return the proxy wallet address if found
+    // For MetaMask users: Check Gnosis Safe Factory
+    // Per Polymarket docs: Gnosis Safe Factory creates 1 of 1 multisig for MetaMask users
+    try {
+      // Note: Gnosis Safe Factory uses getAddress to predict the proxy address
+      // For a 1 of 1 multisig, owners = [eoaAddress], threshold = 1
+      // We need to check if the contract exists at that address
+      const predictedAddress = await publicClient.readContract({
+        address: POLYMARKET_GNOSIS_SAFE_FACTORY,
+        abi: GNOSIS_SAFE_FACTORY_ABI,
+        functionName: 'getAddress',
+        args: [
+          [eoaAddress], // owners: single owner (1 of 1 multisig)
+          1n, // threshold: 1 signature required
+          '0x0000000000000000000000000000000000000000', // to: zero address
+          '0x', // data: empty
+          '0x0000000000000000000000000000000000000000', // fallbackHandler: zero address
+          '0x0000000000000000000000000000000000000000', // paymentToken: zero address
+          0n, // payment: 0
+          '0x0000000000000000000000000000000000000000', // paymentReceiver: zero address
+        ],
+      });
+
+      // Check if contract exists at predicted address
+      const code = await publicClient.getBytecode({ address: predictedAddress });
+      if (code && code !== '0x') {
+        console.log('Found Gnosis Safe proxy wallet:', predictedAddress);
+        return predictedAddress;
+      }
+    } catch (error) {
+      console.log('Gnosis Safe Factory check failed (may not exist yet):', error);
+    }
+
+    // For MagicLink users: Check Polymarket Proxy Factory
+    // TODO: Implement Polymarket Proxy Factory lookup when ABI is available
     
+    // If no proxy wallet found, return null
+    console.log('No proxy wallet found for:', eoaAddress);
     return null;
   } catch (error) {
     console.error('Error checking proxy wallet:', error);
@@ -95,17 +143,19 @@ export async function deployProxyWallet(
  * Per Polymarket docs: Proxy wallets are created automatically on first use
  * 
  * @param eoaAddress - The EOA address
- * @param walletClient - Wagmi wallet client
+ * @param publicClient - Viem public client for reads
+ * @param walletClient - Wagmi wallet client for writes
  * @param walletType - Wallet type ('metamask' or 'magiclink')
  * @returns The proxy wallet address
  */
 export async function ensureProxyWallet(
   eoaAddress: Address,
+  publicClient: PublicClient,
   walletClient: WalletClient,
   walletType: 'metamask' | 'magiclink' = 'metamask'
 ): Promise<Address> {
   // Check if proxy wallet already exists
-  const existingProxy = await getProxyWalletAddress(eoaAddress, walletClient);
+  const existingProxy = await getProxyWalletAddress(eoaAddress, publicClient);
   
   if (existingProxy) {
     console.log('Proxy wallet already exists:', existingProxy);

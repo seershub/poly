@@ -10,7 +10,7 @@
 
 'use client';
 
-import { useAccount, useWalletClient } from 'wagmi';
+import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProxyWalletAddress, ensureProxyWallet } from '@/lib/polymarket/proxyWallet';
 import type { Address } from 'viem';
@@ -22,6 +22,7 @@ import type { Address } from 'viem';
 export function useProxyWallet() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
   const queryClient = useQueryClient();
 
   // Query to check if proxy wallet exists
@@ -33,27 +34,27 @@ export function useProxyWallet() {
   } = useQuery({
     queryKey: ['proxy-wallet', address],
     queryFn: async () => {
-      if (!address || !walletClient) {
+      if (!address || !publicClient) {
         return null;
       }
 
       // Check if proxy wallet exists
-      const proxyAddress = await getProxyWalletAddress(address, walletClient);
+      const proxyAddress = await getProxyWalletAddress(address, publicClient);
       return proxyAddress;
     },
-    enabled: isConnected && !!address && !!walletClient,
+    enabled: isConnected && !!address && !!publicClient,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   // Mutation to create proxy wallet
   const createProxyMutation = useMutation({
     mutationFn: async (walletType: 'metamask' | 'magiclink' = 'metamask') => {
-      if (!address || !walletClient) {
+      if (!address || !walletClient || !publicClient) {
         throw new Error('Wallet not connected');
       }
 
       // Ensure proxy wallet exists (create if needed)
-      const proxyAddress = await ensureProxyWallet(address, walletClient, walletType);
+      const proxyAddress = await ensureProxyWallet(address, publicClient, walletClient, walletType);
       return proxyAddress;
     },
     onSuccess: (proxyAddress) => {
