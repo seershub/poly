@@ -8,9 +8,10 @@ import {
   useWriteContract,
   useWalletClient,
   useWaitForTransactionReceipt,
+  useChainId,
 } from 'wagmi';
 import { parseUnits } from 'viem';
-import { POLYGON_USDC_ADDRESS, POLYMARKET_CLOB_ADDRESS, USDC_DECIMALS } from '@/lib/constants';
+import { POLYGON_USDC_ADDRESS, POLYMARKET_CLOB_ADDRESS, USDC_DECIMALS, POLYGON_CHAIN_ID } from '@/lib/constants';
 import { placePrediction, initializeClobClient } from '@/lib/polymarket/clobClient';
 import { useApiCredentials } from './useApiCredentials';
 import type { PredictionParams } from '@/types/match';
@@ -44,17 +45,22 @@ const USDC_ABI = [
  * CRITICAL: Handles USDC approval before placing order
  */
 export function usePlacePrediction() {
-  const { address } = useAccount();
+  const { address, chain } = useAccount();
+  const chainId = useChainId();
   const { data: walletClient } = useWalletClient();
   const { credentials } = useApiCredentials();
   const queryClient = useQueryClient();
 
+  // CRITICAL: Check if connected to Polygon network
+  const isPolygon = chainId === POLYGON_CHAIN_ID || chain?.id === POLYGON_CHAIN_ID;
+
   // Get USDC balance - with enabled check and refetch
+  // Per Polymarket docs: Must be on Polygon network
   const { data: balance, refetch: refetchBalance, isLoading: isLoadingBalance } = useBalance({
     address,
     token: POLYGON_USDC_ADDRESS,
     query: {
-      enabled: !!address, // Only fetch when address is available
+      enabled: !!address && isPolygon, // Only fetch when address is available AND on Polygon
       refetchInterval: 5000, // Refetch every 5 seconds
     },
   });
@@ -85,6 +91,11 @@ export function usePlacePrediction() {
         throw new Error('Wallet not connected');
       }
 
+      // CRITICAL: Check if on Polygon network (per Polymarket docs)
+      if (!isPolygon) {
+        throw new Error(`Please switch to Polygon network (Chain ID: ${POLYGON_CHAIN_ID}). Current chain: ${chainId || chain?.id || 'unknown'}`);
+      }
+
       if (!walletClient) {
         throw new Error('Wallet client not available');
       }
@@ -103,12 +114,12 @@ export function usePlacePrediction() {
       // Per Polymarket docs: Use parseUnits with proper decimal precision
       const requiredUsdc = parseUnits(cost.toFixed(USDC_DECIMALS), USDC_DECIMALS);
 
-      // Ensure balance is loaded (refetch if needed)
-      let currentBalance = balance;
-      if (!currentBalance || isLoadingBalance) {
-        const { data: refreshedBalance } = await refetchBalance();
-        currentBalance = refreshedBalance || balance;
-      }
+      // CRITICAL: Force refetch balance to ensure we have latest data
+      // Per Polymarket docs: Always check balance before placing order
+      console.log('Refetching USDC balance...', { address, isPolygon, chainId });
+      const { data: refreshedBalance, error: balanceError } = await refetchBalance();
+      
+      const currentBalance = refreshedBalance || balance;
 
       console.log('Checking USDC balance (per Polymarket docs):', {
         cost,
@@ -116,11 +127,17 @@ export function usePlacePrediction() {
         balance: currentBalance ? currentBalance.value.toString() : 'null',
         formatted: currentBalance?.formatted,
         symbol: currentBalance?.symbol,
+        chainId,
+        isPolygon,
+        balanceError: balanceError?.message,
       });
 
       // Check USDC balance - per Polymarket requirements
       if (!currentBalance) {
-        throw new Error('USDC balance not loaded. Please ensure you are connected to Polygon network and have USDC in your wallet.');
+        if (balanceError) {
+          throw new Error(`Failed to fetch USDC balance: ${balanceError.message}. Please ensure you are connected to Polygon network and have USDC in your wallet.`);
+        }
+        throw new Error('USDC balance not loaded. Please ensure you are connected to Polygon network (Chain ID: 137) and have USDC in your wallet.');
       }
 
       const balanceValue = BigInt(currentBalance.value);

@@ -53,7 +53,7 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
       params: {
         endpoint: 'markets',
         closed: false,
-        limit: 200, // Increase limit to get more markets
+        limit: 500, // Increased limit to get more markets (was 200)
         offset: 0,
         // Try to filter by sports tags if API supports it
         // tags: 'soccer,football', // Uncomment if API supports tag filtering
@@ -125,16 +125,16 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
 
     console.log(`Found ${sportsMarkets.length} sports markets out of ${markets.length} total markets`);
 
-    // CRITICAL: Filter for major matches only (high volume or liquidity)
-    // Only show markets with significant trading activity
-    const MIN_VOLUME = 1000; // Minimum $1000 volume
-    const MIN_LIQUIDITY = 500; // Minimum $500 liquidity
+    // Filter for major matches (reduced thresholds to show more matches)
+    // Per Polymarket docs: Show markets with reasonable activity
+    const MIN_VOLUME = 100; // Minimum $100 volume (reduced from $1000)
+    const MIN_LIQUIDITY = 50; // Minimum $50 liquidity (reduced from $500)
 
     sportsMarkets = sportsMarkets.filter((market: any) => {
       const volume = market.volumeNum || parseFloat(market.volume || '0');
       const liquidity = market.liquidityNum || parseFloat(market.liquidity || '0');
       
-      // Show market if it has significant volume OR liquidity
+      // Show market if it has reasonable volume OR liquidity
       return volume >= MIN_VOLUME || liquidity >= MIN_LIQUIDITY;
     });
 
