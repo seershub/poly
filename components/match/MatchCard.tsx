@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { PredictionModal } from './PredictionModal';
-import { formatCurrency, formatShortDate, formatPercentage } from '@/lib/utils';
+import { formatCurrency, formatShortDate, formatPercentage, formatPriceAsCents } from '@/lib/utils';
 import type { ParsedMatch, PredictionSide } from '@/types/match';
 import { Calendar, TrendingUp, Droplets } from 'lucide-react';
 
@@ -39,16 +39,16 @@ export function MatchCard({ match }: MatchCardProps) {
             {/* Home Team */}
             <div className="flex items-center justify-between p-2 bg-secondary/30 rounded hover:bg-secondary/50 transition-colors">
               <span className="font-semibold">{match.homeTeam}</span>
-              <span className="text-sm text-muted-foreground">
-                {formatPercentage(match.outcomes.YES.price, 0)}
+              <span className="text-sm font-bold text-foreground">
+                {formatPriceAsCents(match.outcomes.YES.price)}
               </span>
             </div>
 
             {/* Away Team */}
             <div className="flex items-center justify-between p-2 bg-secondary/30 rounded hover:bg-secondary/50 transition-colors">
               <span className="font-semibold">{match.awayTeam}</span>
-              <span className="text-sm text-muted-foreground">
-                {formatPercentage(match.outcomes.NO.price, 0)}
+              <span className="text-sm font-bold text-foreground">
+                {formatPriceAsCents(match.outcomes.NO.price)}
               </span>
             </div>
           </div>

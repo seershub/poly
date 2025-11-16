@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { usePlacePrediction } from '@/hooks/usePlacePrediction';
 import { useAccount } from 'wagmi';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatPriceAsCents } from '@/lib/utils';
 import { SHARE_PRESETS, MIN_SHARE_SIZE, MAX_SHARE_SIZE } from '@/lib/constants';
 import type { ParsedMatch, PredictionSide } from '@/types/match';
 import { TrendingUp, TrendingDown } from 'lucide-react';
@@ -115,7 +115,7 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
           <div className="bg-secondary/50 p-4 rounded-lg space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Current Price:</span>
-              <span className="font-semibold">{formatCurrency(price)}</span>
+              <span className="font-semibold">{formatPriceAsCents(price)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Implied Odds:</span>

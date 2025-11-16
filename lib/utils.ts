@@ -14,6 +14,27 @@ export function formatCurrency(value: number, decimals: number = 2): string {
   }).format(value);
 }
 
+/**
+ * Format price as cents (Polymarket style)
+ * Per Polymarket docs: Prices are displayed as cents (0-100 range)
+ * Example: 0.985 → "98.5¢"
+ */
+export function formatPriceAsCents(price: number, decimals: number = 1): string {
+  const cents = price * 100;
+  return `${cents.toFixed(decimals)}¢`;
+}
+
+/**
+ * Format price for Polymarket display
+ * Shows as cents if < $1, otherwise as dollars
+ */
+export function formatPolymarketPrice(price: number): string {
+  if (price < 1) {
+    return formatPriceAsCents(price);
+  }
+  return formatCurrency(price);
+}
+
 export function formatPercentage(value: number, decimals: number = 1): string {
   return `${(value * 100).toFixed(decimals)}%`;
 }
