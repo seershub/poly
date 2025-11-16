@@ -3,6 +3,13 @@ export const POLYGON_USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'
 export const POLYMARKET_CLOB_ADDRESS = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E' as const;
 export const POLYMARKET_COLLATERAL_TOKEN = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const; // USDC
 
+// Polymarket Proxy Wallet Factories
+// Per Polymarket docs: Proxy wallets are 1 of 1 multisig wallets deployed for each user
+// They hold user positions (ERC1155) and USDC (ERC20)
+// https://docs.polymarket.com/developers/proxy-wallet
+export const POLYMARKET_GNOSIS_SAFE_FACTORY = '0xaacfeea03eb1561c4e67d661e40682bd20e3541b' as const; // For MetaMask users
+export const POLYMARKET_PROXY_FACTORY = '0xaB45c54AB0c941a2F231C04C3f49182e1A254052' as const; // For MagicLink users
+
 // Polymarket API Endpoints
 // Use environment variables if available, otherwise use defaults
 // NEXT_PUBLIC_ prefix makes these available on both client and server
