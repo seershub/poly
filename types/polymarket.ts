@@ -60,6 +60,20 @@ export interface PolymarketEvent {
   ticker?: string;
 }
 
+// Gamma Event Type (from /events endpoint)
+export interface GammaEvent {
+  id: string;
+  title?: string;
+  slug?: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  markets?: PolymarketMarket[];
+  tags?: string[];
+  closed?: boolean;
+  active?: boolean;
+}
+
 // CLOB Client Types
 export interface ApiCredentials {
   apiKey: string;
