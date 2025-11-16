@@ -162,23 +162,44 @@ export function usePlacePrediction() {
 
       if (currentAllowance < requiredUsdc) {
         // Need to approve first
-        console.log('⚠️ Insufficient allowance, requesting approval...');
-        console.log('Approving USDC for CLOB contract:', {
-          spender: POLYMARKET_CLOB_ADDRESS,
-          amount: requiredUsdc.toString(),
-        });
+        // Per Polymarket docs: Use Relayer Client for gasless token approvals
+        console.log('⚠️ Insufficient allowance, requesting approval via Relayer (gasless)...');
+        
+        try {
+          // Try to approve via Relayer (gasless) if builder credentials are configured
+          const { approveTokenViaRelayer } = await import('@/lib/polymarket/relayerClient');
+          const approvalTxHash = await approveTokenViaRelayer(
+            walletClient,
+            POLYGON_USDC_ADDRESS,
+            POLYMARKET_CLOB_ADDRESS,
+            requiredUsdc
+          );
+          console.log('✅ Token approval completed via Relayer (gasless):', approvalTxHash);
+          
+          // Wait a bit for the transaction to be processed
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Refetch allowance
+          await refetchAllowance();
+        } catch (relayerError) {
+          console.warn('Relayer approval failed, falling back to direct approval:', relayerError);
+          
+          // Fallback: Direct approval (user pays gas)
+          console.log('Approving USDC for CLOB contract (user pays gas):', {
+            token: POLYGON_USDC_ADDRESS,
+            spender: POLYMARKET_CLOB_ADDRESS,
+            amount: requiredUsdc.toString(),
+          });
 
-        // Request approval
-        approveUsdc({
-          address: POLYGON_USDC_ADDRESS,
-          abi: USDC_ABI,
-          functionName: 'approve',
-          args: [POLYMARKET_CLOB_ADDRESS, requiredUsdc],
-        });
+          approveUsdc({
+            address: POLYGON_USDC_ADDRESS,
+            abi: USDC_ABI,
+            functionName: 'approve',
+            args: [POLYMARKET_CLOB_ADDRESS, requiredUsdc],
+          });
 
-        // Wait for approval (this is handled by useWaitForTransactionReceipt)
-        // In a real implementation, we should wait for the approval before continuing
-        throw new Error('Please approve USDC spending in your wallet, then try again.');
+          throw new Error('Please approve USDC spending in your wallet, then try again.');
+        }
       }
 
       console.log('✅ USDC allowance check passed');
