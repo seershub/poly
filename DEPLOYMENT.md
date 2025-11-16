@@ -37,6 +37,26 @@
    NEXT_PUBLIC_CHAIN_ID = 137
    ```
 
+   **For Polymarket Builder Grant Program** (Optional):
+
+   If you're participating in the Builder Grant Program, add these variables:
+
+   ```
+   POLY_BUILDER_API_KEY = your_builder_api_key
+   POLY_BUILDER_SECRET = your_builder_secret
+   POLY_BUILDER_PASSPHRASE = your_builder_passphrase
+   ```
+
+   **How to get Builder API Keys:**
+   1. Go to https://polymarket.com
+   2. Connect your wallet
+   3. Click profile → Builders section
+   4. Create/Copy your API keys
+
+   **IMPORTANT:** These are server-side keys (no NEXT_PUBLIC_ prefix)
+   - They will NOT be exposed to the client
+   - All orders will be attributed to your builder account for grant tracking
+
 4. **Redeploy**
    - After adding env vars, trigger a redeploy
    - Go to Deployments tab → Click "..." → Redeploy

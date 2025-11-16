@@ -6,14 +6,35 @@ import type { WalletClient } from 'viem';
 import { walletClientToSigner } from '@/lib/ethersAdapter';
 
 /**
- * Builder configuration (optional)
+ * Get builder configuration from environment variables
  * Only needed if participating in Polymarket Builder Grant Program
  */
-interface BuilderConfig {
-  builderApiKey?: string;
-  builderSecret?: string;
-  builderPassphrase?: string;
-  signingServerUrl?: string;
+function getBuilderConfig() {
+  const builderApiKey = process.env.POLY_BUILDER_API_KEY;
+  const builderSecret = process.env.POLY_BUILDER_SECRET;
+  const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;
+  const signingServerUrl = process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
+
+  // If signing server URL is provided, use remote signing
+  if (signingServerUrl) {
+    return {
+      signingServerUrl,
+    };
+  }
+
+  // If builder credentials are provided, use local signing
+  if (builderApiKey && builderSecret && builderPassphrase) {
+    return {
+      localBuilderCreds: {
+        key: builderApiKey,
+        secret: builderSecret,
+        passphrase: builderPassphrase,
+      },
+    };
+  }
+
+  // No builder config
+  return undefined;
 }
 
 /**
@@ -51,18 +72,26 @@ export async function generateApiCredentials(
 }
 
 /**
- * Initialize CLOB client with credentials
+ * Initialize CLOB client with credentials and optional builder configuration
  *
  * @param credentials - User API credentials (generated from wallet)
  *
- * Note: Builder configuration support can be added later if needed
- * for Polymarket Builder Grant Program participation
+ * Builder configuration is automatically loaded from environment variables:
+ * - POLY_BUILDER_API_KEY
+ * - POLY_BUILDER_SECRET
+ * - POLY_BUILDER_PASSPHRASE
+ * - NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL (for remote signing)
+ *
+ * If builder keys are configured, all orders will be attributed to your builder account
+ * for Polymarket Builder Grant Program tracking.
  */
 export function initializeClobClient(
   credentials: ApiCredentials
 ): ClobClient {
-  // Constructor: (host, chainId, signer?, creds?)
-  // We pass undefined for signer and pass creds as the 4th parameter
+  // Constructor: (host, chainId, signer?, creds?, builderConfig?)
+  // We pass undefined for signer, creds as 4th parameter, and builderConfig as 5th
+
+  const builderConfig = getBuilderConfig();
 
   return new ClobClient(
     CLOB_API_URL,
@@ -72,7 +101,8 @@ export function initializeClobClient(
       key: credentials.apiKey,
       secret: credentials.apiSecret,
       passphrase: credentials.apiPassphrase,
-    }
+    },
+    builderConfig as any // Builder config (optional, for grant program)
   );
 }
 
