@@ -225,7 +225,8 @@ export function usePlacePrediction() {
             args: [proxyWalletAddress, POLYMARKET_CLOB_ADDRESS],
           });
           
-          if (BigInt(refreshedAllowance as string) < requiredUsdc) {
+          // readContract already returns bigint, no need to convert
+          if ((refreshedAllowance as bigint) < requiredUsdc) {
             throw new Error('Allowance still insufficient after approval. Please try again.');
           }
         } catch (relayerError) {
