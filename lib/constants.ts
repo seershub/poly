@@ -1,7 +1,6 @@
 // Polygon Mainnet Contract Addresses
-export const POLYGON_USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const;
 export const POLYMARKET_CLOB_ADDRESS = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E' as const;
-export const POLYMARKET_COLLATERAL_TOKEN = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const; // USDC
+export const POLYMARKET_COLLATERAL_TOKEN = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const; // USDC (same as POLYGON_USDC_ADDRESS)
 
 // Polymarket Proxy Wallet Factories
 // Per Polymarket docs: Proxy wallets are 1 of 1 multisig wallets deployed for each user
