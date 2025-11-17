@@ -39,16 +39,27 @@ export function WalletConnect() {
   // Redirect to setup page if wallet is connected but setup is not complete
   // Per Polymarket docs: "When a user first uses Polymarket.com to trade they are prompted to create a wallet"
   useEffect(() => {
-    if ((isConnected || authenticated) && address) {
-      // Check if setup is needed (proxy wallet, USDC approval, or API credentials missing)
+    if ((isConnected || authenticated) && address && typeof window !== 'undefined') {
+      const currentPath = window.location.pathname;
+      
+      // Don't redirect if already on setup page
+      if (currentPath === '/setup') {
+        return;
+      }
+      
+      // Check if setup is already completed (from localStorage)
+      const setupCompleted = localStorage.getItem(`poly-setup-completed-${address}`);
+      if (setupCompleted === 'true') {
+        return; // Setup already completed, don't redirect
+      }
+      
+      // Check if setup is needed (proxy wallet or API credentials missing)
+      // Note: USDC approval is checked on setup page, not here
       const needsSetup = !hasProxyWallet || !credentials;
       
-      if (needsSetup && typeof window !== 'undefined') {
-        const currentPath = window.location.pathname;
-        if (currentPath !== '/setup') {
-          // Redirect to setup page
-          window.location.href = '/setup';
-        }
+      if (needsSetup) {
+        // Redirect to setup page
+        window.location.href = '/setup';
       }
     }
   }, [isConnected, authenticated, address, hasProxyWallet, credentials]);

@@ -181,30 +181,38 @@ export default function TradingWalletSetupPage() {
 
   // Auto-complete steps when conditions are met
   useEffect(() => {
-    if (hasProxyWallet && steps[0]?.status !== 'completed') {
+    if (hasProxyWallet && steps.length > 0 && steps[0]?.status !== 'completed') {
       setSteps((prev) => {
         const updated = [...prev];
-        updated[0] = { ...updated[0], status: 'completed' };
+        if (updated[0]) {
+          updated[0] = { ...updated[0], status: 'completed' };
+        }
         return updated;
       });
     }
   }, [hasProxyWallet, steps]);
 
   useEffect(() => {
-    if (allowance && BigInt(allowance.toString()) > BigInt(0) && steps[1]?.status !== 'completed') {
+    // Check allowance from proxy wallet (or EOA if proxy doesn't exist)
+    const hasAllowance = allowance && BigInt(allowance.toString()) > BigInt(0);
+    if (hasAllowance && steps.length > 1 && steps[1]?.status !== 'completed') {
       setSteps((prev) => {
         const updated = [...prev];
-        updated[1] = { ...updated[1], status: 'completed' };
+        if (updated[1]) {
+          updated[1] = { ...updated[1], status: 'completed' };
+        }
         return updated;
       });
     }
   }, [allowance, steps]);
 
   useEffect(() => {
-    if (credentials && steps[2]?.status !== 'completed') {
+    if (credentials && steps.length > 2 && steps[2]?.status !== 'completed') {
       setSteps((prev) => {
         const updated = [...prev];
-        updated[2] = { ...updated[2], status: 'completed' };
+        if (updated[2]) {
+          updated[2] = { ...updated[2], status: 'completed' };
+        }
         return updated;
       });
     }
@@ -215,15 +223,24 @@ export default function TradingWalletSetupPage() {
 
   // Auto-redirect when all steps are completed
   useEffect(() => {
-    if (allStepsCompleted) {
-      console.log('All steps completed, redirecting to home...', { steps });
+    if (allStepsCompleted && displayAddress) {
+      console.log('All steps completed, marking setup as complete and redirecting...', { 
+        steps,
+        hasProxyWallet,
+        credentials: !!credentials,
+        allowance: allowance?.toString(),
+      });
+      
+      // Mark setup as completed in localStorage
+      localStorage.setItem(`poly-setup-completed-${displayAddress}`, 'true');
+      
       const timer = setTimeout(() => {
         // Use window.location for more reliable redirect
         window.location.href = '/';
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [allStepsCompleted, steps]);
+  }, [allStepsCompleted, steps, displayAddress, hasProxyWallet, credentials, allowance]);
 
   const handleStepAction = async (step: SetupStep) => {
     if (!step.action || step.status === 'completed' || step.status === 'in-progress') {
