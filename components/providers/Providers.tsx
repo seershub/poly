@@ -49,10 +49,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
           termsAndConditionsUrl: '/terms',
           privacyPolicyUrl: '/privacy',
         },
-        // Customize the modal
-        modal: {
-          showOnLoad: false,
-        },
       }}
     >
       <WagmiProvider config={config}>

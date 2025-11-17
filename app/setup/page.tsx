@@ -198,15 +198,15 @@ export default function TradingWalletSetupPage() {
     }
   }, [allowance, steps]);
 
-        useEffect(() => {
-          if (credentials && steps[2]?.status !== 'completed') {
-            setSteps((prev) => {
-              const updated = [...prev];
-              updated[2] = { ...updated[2], status: 'completed' };
-              return updated;
-            });
-          }
-        }, [credentials, steps, toast]);
+  useEffect(() => {
+    if (credentials && steps[2]?.status !== 'completed') {
+      setSteps((prev) => {
+        const updated = [...prev];
+        updated[2] = { ...updated[2], status: 'completed' };
+        return updated;
+      });
+    }
+  }, [credentials, steps]);
 
   // Check if all steps are completed
   const allStepsCompleted = steps.every((step) => step.status === 'completed');
