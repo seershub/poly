@@ -156,6 +156,8 @@ export default function TradingWalletSetupPage() {
         },
       },
     ]);
+    // Note: toast is stable from hook, but ESLint requires it in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     hasProxyWallet,
     isCreatingProxy,
