@@ -190,14 +190,12 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
         isPolygon,
         eoaBalance: eoaBalance?.formatted,
         eoaBalanceError,
-        manualEoaBalance,
         proxyWalletAddress,
         proxyBalance: proxyBalance?.formatted,
         proxyBalanceError,
-        manualProxyBalance,
       });
     }
-  }, [open, address, chainId, isPolygon, eoaBalance, eoaBalanceError, manualEoaBalance, proxyWalletAddress, proxyBalance, proxyBalanceError, manualProxyBalance]);
+  }, [open, address, chainId, isPolygon, eoaBalance, eoaBalanceError, proxyWalletAddress, proxyBalance, proxyBalanceError]);
 
   const handleSwitchToPolygon = async () => {
     try {
@@ -373,7 +371,6 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
                 <div className="mt-2 pt-2 border-t border-zinc-700 text-xs text-zinc-500">
                   <div>Chain ID: {chainId} (Polygon: {POLYGON_CHAIN_ID})</div>
                   <div>Hook Balance: {eoaBalance?.formatted || 'N/A'}</div>
-                  <div>Manual Balance: {manualEoaBalance || 'N/A'}</div>
                   {eoaBalanceError && <div className="text-red-400">Error: {eoaBalanceError.message}</div>}
                 </div>
               )}

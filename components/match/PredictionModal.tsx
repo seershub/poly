@@ -301,7 +301,7 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
           </Button>
           <Button
             onClick={handlePredict}
-            disabled={isPending || isApproving || !isConnected || !isPolygon}
+            disabled={isPending || isApproving || !isConnected || !isOnCorrectChain || match.platform === 'kalshi'}
             className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold"
           >
             {isApproving ? (
