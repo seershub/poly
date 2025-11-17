@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { useAccount, useWalletClient, usePublicClient, useBalance, useWaitForTransactionReceipt, useChainId, useSwitchChain } from 'wagmi';
+import { useAccount, useWalletClient, usePublicClient, useBalance, useWaitForTransactionReceipt, useChainId, useSwitchChain, useReadContract } from 'wagmi';
 import { useProxyWallet } from '@/hooks/useProxyWallet';
 import { POLYGON_USDC_ADDRESS, ETHEREUM_USDC_ADDRESS, BASE_USDC_ADDRESS, USDC_DECIMALS, POLYGON_CHAIN_ID, ETHEREUM_CHAIN_ID, BASE_CHAIN_ID } from '@/lib/constants';
 import { depositUsdcToProxyWallet } from '@/lib/polymarket/usdcTransfer';
@@ -89,6 +89,17 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
   // CRITICAL: Check if on Polygon network
   const isPolygon = chainId === POLYGON_CHAIN_ID;
 
+  // USDC ERC20 ABI for balanceOf
+  const USDC_ABI = [
+    {
+      name: 'balanceOf',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [{ name: 'account', type: 'address' }],
+      outputs: [{ type: 'uint256' }],
+    },
+  ] as const;
+
   // CRITICAL FIX: Get EOA USDC balance 
   // Try to fetch from Polygon regardless of current chain (cross-chain balance check)
   // Per Wagmi v2 docs: useBalance with chainId can fetch balances from different chains
@@ -108,6 +119,39 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
       retryDelay: 1000, // Wait 1s between retries
     },
   });
+
+  // MANUAL FALLBACK: Use useReadContract to directly read balance from Polygon contract
+  // This is a reliable fallback when useBalance fails or returns 0
+  // Always enabled to ensure we have a backup method
+  const { 
+    data: manualBalanceRaw, 
+    refetch: refetchManualBalance,
+    isLoading: isLoadingManualBalance 
+  } = useReadContract({
+    address: POLYGON_USDC_ADDRESS,
+    abi: USDC_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    chainId: polygon.id, // Always read from Polygon
+    query: {
+      enabled: !!address && open,
+      refetchInterval: 5000,
+      retry: 3,
+      retryDelay: 1000,
+    },
+  });
+
+  // Convert manual balance from raw uint256 to formatted string
+  // Use manual balance if useBalance failed/returned 0 AND manual balance is > 0
+  const manualBalanceFormatted = manualBalanceRaw 
+    ? formatUnits(manualBalanceRaw, USDC_DECIMALS) 
+    : null;
+  
+  const manualEoaBalance = (
+    (eoaBalanceError || (eoaBalance && parseFloat(eoaBalance.formatted) === 0)) && 
+    manualBalanceFormatted && 
+    parseFloat(manualBalanceFormatted) > 0
+  ) ? manualBalanceFormatted : null;
 
   // CRITICAL FIX: Get proxy wallet USDC balance
   // Always fetch from Polygon (where USDC is held)
@@ -248,8 +292,8 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
       return;
     }
 
-    // CRITICAL: Check balance from useBalance hook (100% reliable with explicit chainId)
-    const eoaBalanceValue = eoaBalance?.formatted || '0';
+    // CRITICAL: Check balance - use manual fallback if available, otherwise useBalance
+    const eoaBalanceValue = manualEoaBalance || eoaBalance?.formatted || '0';
     const eoaBalanceNum = parseFloat(eoaBalanceValue);
     
     if (amountNum > eoaBalanceNum) {
@@ -291,16 +335,16 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
   };
 
   const setPercentage = (percentage: number) => {
-    // CRITICAL: Use useBalance hook balance (100% reliable with explicit chainId)
-    const balanceValue = eoaBalance?.formatted || '0';
+    // CRITICAL: Use manual fallback if available, otherwise useBalance
+    const balanceValue = manualEoaBalance || eoaBalance?.formatted || '0';
     if (!balanceValue || action !== 'deposit') return;
     const balance = parseFloat(balanceValue);
     const calculatedAmount = (balance * percentage / 100).toFixed(2);
     setAmount(calculatedAmount);
   };
 
-  // CRITICAL: Get display balance from useBalance hook
-  const displayEoaBalance = eoaBalance?.formatted || '0.00';
+  // CRITICAL: Get display balance - prioritize manual fallback if useBalance failed/returned 0
+  const displayEoaBalance = manualEoaBalance || eoaBalance?.formatted || '0.00';
   const displayProxyBalance = proxyBalance?.formatted || '0.00';
 
   return (
