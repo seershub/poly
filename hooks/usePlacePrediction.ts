@@ -290,7 +290,7 @@ export function usePlacePrediction() {
     isPending: mutation.isPending || isApproving,
     isSuccess: mutation.isSuccess,
     isError: mutation.isError,
-    error: mutation.error,
+    error: mutation.error as Error | null,
     isApproving,
   };
 }

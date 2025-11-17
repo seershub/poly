@@ -19,13 +19,13 @@ export default function HomePage() {
         </p>
         <div className="flex gap-4 justify-center">
           <Link href="/matches">
-            <Button size="lg" className="gap-2">
+            <Button size="lg" className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold shadow-lg">
               <TrendingUp className="h-5 w-5" />
               Browse Matches
             </Button>
           </Link>
           <Link href="/dashboard">
-            <Button size="lg" variant="outline" className="gap-2">
+            <Button size="lg" variant="outline" className="gap-2 border-2 hover:bg-primary/10">
               View Dashboard
             </Button>
           </Link>

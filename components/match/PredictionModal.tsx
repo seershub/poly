@@ -15,8 +15,10 @@ import { useAccount } from 'wagmi';
 import { formatCurrency, formatPriceAsCents } from '@/lib/utils';
 import { SHARE_PRESETS, MIN_SHARE_SIZE, MAX_SHARE_SIZE } from '@/lib/constants';
 import type { ParsedMatch, PredictionSide } from '@/types/match';
-import { TrendingUp, TrendingDown } from 'lucide-react';
-import { toast } from '@/hooks/useToast';
+import { TrendingUp, TrendingDown, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import { useChainId } from 'wagmi';
+import { POLYGON_CHAIN_ID } from '@/lib/constants';
 
 interface PredictionModalProps {
   match: ParsedMatch;
@@ -25,8 +27,12 @@ interface PredictionModalProps {
 }
 
 export function PredictionModal({ match, side, onClose }: PredictionModalProps) {
-  const { isConnected } = useAccount();
-  const { predict, isPending, isApproving } = usePlacePrediction();
+  const { isConnected, address } = useAccount();
+  const chainId = useChainId();
+  const { predict, isPending, isApproving, error } = usePlacePrediction();
+  
+  // Check if on Polygon network
+  const isPolygon = chainId === POLYGON_CHAIN_ID;
 
   // CRITICAL: Share-based input (NOT amount-based)
   const [shares, setShares] = useState(1.0);
@@ -42,10 +48,19 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
   const profit = potentialPayout - cost; // Profit = payout - cost
 
   const handlePredict = () => {
-    if (!isConnected) {
+    if (!isConnected || !address) {
       toast({
         title: 'Wallet Not Connected',
         description: 'Please connect your wallet first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!isPolygon) {
+      toast({
+        title: 'Wrong Network',
+        description: `Please switch to Polygon network (Chain ID: ${POLYGON_CHAIN_ID}). Current: ${chainId}`,
         variant: 'destructive',
       });
       return;
@@ -111,15 +126,27 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Network Warning */}
+          {!isPolygon && (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg flex items-center gap-2 text-yellow-500">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm">Please switch to Polygon network</span>
+            </div>
+          )}
+
           {/* Market Info */}
-          <div className="bg-secondary/50 p-4 rounded-lg space-y-2">
+          <div className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20 p-4 rounded-lg space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Current Price:</span>
-              <span className="font-semibold">{formatPriceAsCents(price)}</span>
+              <span className="font-bold text-lg">{formatPriceAsCents(price)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Implied Odds:</span>
               <span className="font-semibold">{outcome.impliedOdds.toFixed(1)}%</span>
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground pt-2 border-t border-blue-500/20">
+              <span>Volume:</span>
+              <span>{match.volume > 0 ? `$${(match.volume / 1000).toFixed(1)}K` : 'N/A'}</span>
             </div>
           </div>
 
@@ -163,41 +190,62 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
           </div>
 
           {/* Payout Calculations */}
-          <div className="bg-blue-600/20 border border-blue-600/30 p-4 rounded-lg space-y-2">
-            <div className="flex justify-between">
-              <span className="text-sm">Est. Cost:</span>
-              <span className="font-semibold">{formatCurrency(cost)} USDC</span>
+          <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/30 p-4 rounded-lg space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Est. Cost:</span>
+              <span className="font-bold text-lg">{formatCurrency(cost)} USDC</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-sm">Potential Payout:</span>
-              <span className="font-semibold">{formatCurrency(potentialPayout)} USDC</span>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Potential Payout:</span>
+              <span className="font-semibold text-green-400">{formatCurrency(potentialPayout)} USDC</span>
             </div>
-            <div className="border-t border-blue-600/30 pt-2 mt-2">
-              <div className="flex justify-between">
-                <span className="text-sm font-medium">Potential Profit:</span>
-                <span className="font-bold text-green-500">
+            <div className="border-t border-green-500/30 pt-3 mt-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-semibold">Potential Profit:</span>
+                <span className="font-bold text-xl text-green-500 flex items-center gap-1">
+                  <TrendingUp className="h-5 w-5" />
                   +{formatCurrency(profit)} USDC
                 </span>
               </div>
             </div>
           </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-lg flex items-start gap-2 text-red-400">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 text-sm">
+                <p className="font-semibold mb-1">Error</p>
+                <p className="text-xs">{error.message || 'Failed to place prediction'}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="flex gap-2">
-          <Button variant="outline" onClick={onClose} disabled={isPending}>
+          <Button variant="outline" onClick={onClose} disabled={isPending || isApproving}>
             Cancel
           </Button>
           <Button
             onClick={handlePredict}
-            disabled={isPending || !isConnected}
-            className="gap-2"
+            disabled={isPending || isApproving || !isConnected || !isPolygon}
+            className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold"
           >
             {isApproving ? (
-              'Approving USDC...'
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Approving USDC...
+              </>
             ) : isPending ? (
-              'Placing Prediction...'
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Placing Prediction...
+              </>
             ) : (
-              <>Predict Now • {formatCurrency(cost)}</>
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                Predict Now • {formatCurrency(cost)}
+              </>
             )}
           </Button>
         </DialogFooter>
