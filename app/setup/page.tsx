@@ -211,18 +211,19 @@ export default function TradingWalletSetupPage() {
   }, [credentials, steps]);
 
   // Check if all steps are completed
-  const allStepsCompleted = steps.every((step) => step.status === 'completed');
+  const allStepsCompleted = steps.length === 3 && steps.every((step) => step.status === 'completed');
 
   // Auto-redirect when all steps are completed
   useEffect(() => {
-    if (allStepsCompleted && steps.length > 0) {
-      console.log('All steps completed, redirecting to home...');
+    if (allStepsCompleted) {
+      console.log('All steps completed, redirecting to home...', { steps });
       const timer = setTimeout(() => {
-        router.replace('/');
+        // Use window.location for more reliable redirect
+        window.location.href = '/';
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [allStepsCompleted, steps.length, router]);
+  }, [allStepsCompleted, steps]);
 
   const handleStepAction = async (step: SetupStep) => {
     if (!step.action || step.status === 'completed' || step.status === 'in-progress') {
@@ -364,7 +365,9 @@ export default function TradingWalletSetupPage() {
                   <h3 className="text-xl font-bold text-white mb-2">Setup Complete!</h3>
                   <p className="text-zinc-400">Redirecting to home page...</p>
                   <Button
-                    onClick={() => router.replace('/')}
+                    onClick={() => {
+                      window.location.href = '/';
+                    }}
                     className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white"
                   >
                     Go to Home
