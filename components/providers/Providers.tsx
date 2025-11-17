@@ -55,13 +55,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
       }}
     >
-      <PrivyWagmiConnector wagmiConfig={config}>
-        <WagmiProvider config={config}>
+      <WagmiProvider config={config}>
+        <PrivyWagmiConnector wagmiConfig={config}>
           <QueryClientProvider client={queryClient}>
             {children}
           </QueryClientProvider>
-        </WagmiProvider>
-      </PrivyWagmiConnector>
+        </PrivyWagmiConnector>
+      </WagmiProvider>
     </PrivyProvider>
   );
 }
