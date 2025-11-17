@@ -9,14 +9,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { useAccount, useWalletClient, usePublicClient, useBalance, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useWalletClient, usePublicClient, useBalance, useWaitForTransactionReceipt, useChainId } from 'wagmi';
 import { useProxyWallet } from '@/hooks/useProxyWallet';
-import { POLYGON_USDC_ADDRESS, USDC_DECIMALS } from '@/lib/constants';
-import { depositUsdcToProxyWallet, getUsdcBalance } from '@/lib/polymarket/usdcTransfer';
-import { parseUnits, formatUnits } from 'viem';
-import { Wallet, ArrowDown, ArrowUp, Loader2, X } from 'lucide-react';
+import { POLYGON_USDC_ADDRESS, USDC_DECIMALS, POLYGON_CHAIN_ID } from '@/lib/constants';
+import { depositUsdcToProxyWallet } from '@/lib/polymarket/usdcTransfer';
+import { parseUnits } from 'viem';
+import { Wallet, ArrowDown, ArrowUp, Loader2, X, ChevronDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency } from '@/lib/utils';
+import { polygon } from 'viem/chains';
 
 interface FundWalletModalProps {
   open: boolean;
@@ -25,34 +25,76 @@ interface FundWalletModalProps {
 
 type FundAction = 'deposit' | 'withdraw' | null;
 
+// Token configuration (for future expansion)
+type Token = {
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
+  icon?: string;
+};
+
+// Chain configuration (for future expansion)
+type Chain = {
+  id: number;
+  name: string;
+  icon?: string;
+};
+
+const TOKENS: Token[] = [
+  {
+    symbol: 'USDC',
+    name: 'USD Coin',
+    address: POLYGON_USDC_ADDRESS,
+    decimals: 6,
+  },
+  // Future: USDT, ETH, SOL
+];
+
+const CHAINS: Chain[] = [
+  {
+    id: polygon.id,
+    name: 'Polygon',
+  },
+  // Future: Ethereum, Base, Solana
+];
+
 export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
   const { address } = useAccount();
+  const chainId = useChainId();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
   const { proxyWalletAddress, hasProxyWallet } = useProxyWallet();
   const { toast } = useToast();
   
   const [action, setAction] = useState<FundAction>(null);
+  const [selectedToken, setSelectedToken] = useState<Token>(TOKENS[0]);
+  const [selectedChain, setSelectedChain] = useState<Chain>(CHAINS[0]);
+  const [showTokenDropdown, setShowTokenDropdown] = useState(false);
+  const [showChainDropdown, setShowChainDropdown] = useState(false);
   const [amount, setAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
 
-  // Get EOA USDC balance
-  const { data: eoaBalance, refetch: refetchEoaBalance } = useBalance({
+  // CRITICAL: Check if on Polygon network
+  const isPolygon = chainId === POLYGON_CHAIN_ID;
+
+  // Get EOA USDC balance - CRITICAL: Only fetch on Polygon network
+  const { data: eoaBalance, refetch: refetchEoaBalance, isLoading: isLoadingEoaBalance } = useBalance({
     address,
     token: POLYGON_USDC_ADDRESS,
     query: {
-      enabled: !!address && open,
+      enabled: !!address && open && isPolygon, // CRITICAL: Only fetch when on Polygon
       refetchInterval: 5000,
     },
   });
 
-  // Get proxy wallet USDC balance
-  const { data: proxyBalance, refetch: refetchProxyBalance } = useBalance({
+  // Get proxy wallet USDC balance - CRITICAL: Only fetch on Polygon network
+  const { data: proxyBalance, refetch: refetchProxyBalance, isLoading: isLoadingProxyBalance } = useBalance({
     address: proxyWalletAddress || undefined,
     token: POLYGON_USDC_ADDRESS,
     query: {
-      enabled: !!proxyWalletAddress && open,
+      enabled: !!proxyWalletAddress && open && isPolygon, // CRITICAL: Only fetch when on Polygon
       refetchInterval: 5000,
     },
   });
@@ -72,6 +114,8 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
       setAmount('');
       setTxHash(null);
       setIsProcessing(false);
+      setShowTokenDropdown(false);
+      setShowChainDropdown(false);
     }
   }, [open]);
 
@@ -100,6 +144,16 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
       toast({
         title: 'Error',
         description: 'Please enter an amount and ensure wallet is connected',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // CRITICAL: Check if on Polygon network
+    if (!isPolygon) {
+      toast({
+        title: 'Wrong Network',
+        description: `Please switch to Polygon network (Chain ID: ${POLYGON_CHAIN_ID}). Current: ${chainId}`,
         variant: 'destructive',
       });
       return;
@@ -191,7 +245,7 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
                     <p className="text-sm text-green-400/70">Add funds to your trading wallet</p>
                   </div>
                 </div>
-                <ArrowDown className="h-4 w-4 text-zinc-400 rotate-[-90deg]" />
+                <ChevronDown className="h-4 w-4 text-zinc-400 rotate-[-90deg]" />
               </div>
             </button>
 
@@ -209,7 +263,7 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
                     <p className="text-sm text-blue-400/70">Move funds back to your wallet</p>
                   </div>
                 </div>
-                <ArrowDown className="h-4 w-4 text-zinc-400 rotate-[-90deg]" />
+                <ChevronDown className="h-4 w-4 text-zinc-400 rotate-[-90deg]" />
               </div>
             </button>
 
@@ -217,16 +271,20 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
             <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-400">Your Wallet:</span>
-                <span className="text-white font-semibold">{eoaBalance?.formatted || '0.00'} USDC</span>
+                <span className="text-white font-semibold">
+                  {isLoadingEoaBalance ? 'Loading...' : (eoaBalance?.formatted || '0.00')} USDC
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-400">Trading Wallet:</span>
-                <span className="text-white font-semibold">{proxyBalance?.formatted || '0.00'} USDC</span>
+                <span className="text-white font-semibold">
+                  {isLoadingProxyBalance ? 'Loading...' : (proxyBalance?.formatted || '0.00')} USDC
+                </span>
               </div>
             </div>
           </div>
         ) : action === 'deposit' ? (
-          // Deposit view
+          // Deposit view - Matching competitor design
           <div className="space-y-4 py-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">Deposit USDC</h3>
@@ -240,15 +298,112 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
               </Button>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm text-zinc-400">Available Balance</label>
-              <div className="text-2xl font-bold text-white">
-                {eoaBalance?.formatted || '0.00'} USDC
+            {/* Network Warning */}
+            {!isPolygon && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg flex items-center gap-2 text-yellow-500">
+                <X className="h-4 w-4" />
+                <span className="text-sm">Please switch to Polygon network (Chain ID: {POLYGON_CHAIN_ID})</span>
+              </div>
+            )}
+
+            {/* Token and Chain Selection - Matching competitor design */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Token Selection */}
+              <div className="space-y-2">
+                <label className="text-xs text-zinc-400 uppercase tracking-wide">TOKEN</label>
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setShowTokenDropdown(!showTokenDropdown);
+                      setShowChainDropdown(false);
+                    }}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg flex items-center justify-between hover:border-zinc-600 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center">
+                        <span className="text-xs font-bold text-blue-400">$</span>
+                      </div>
+                      <span className="text-white font-medium">{selectedToken.symbol}</span>
+                    </div>
+                    <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${showTokenDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showTokenDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {TOKENS.map((token) => (
+                        <button
+                          key={token.symbol}
+                          onClick={() => {
+                            setSelectedToken(token);
+                            setShowTokenDropdown(false);
+                          }}
+                          className="w-full px-4 py-3 flex items-center gap-2 hover:bg-zinc-700 transition-colors text-left"
+                        >
+                          <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center">
+                            <span className="text-xs font-bold text-blue-400">$</span>
+                          </div>
+                          <span className="text-white font-medium">{token.symbol}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Chain Selection */}
+              <div className="space-y-2">
+                <label className="text-xs text-zinc-400 uppercase tracking-wide">CHAIN</label>
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setShowChainDropdown(!showChainDropdown);
+                      setShowTokenDropdown(false);
+                    }}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg flex items-center justify-between hover:border-zinc-600 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
+                        <span className="text-xs font-bold text-purple-400">P</span>
+                      </div>
+                      <span className="text-white font-medium">{selectedChain.name}</span>
+                    </div>
+                    <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${showChainDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showChainDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {CHAINS.map((chain) => (
+                        <button
+                          key={chain.id}
+                          onClick={() => {
+                            setSelectedChain(chain);
+                            setShowChainDropdown(false);
+                          }}
+                          className="w-full px-4 py-3 flex items-center gap-2 hover:bg-zinc-700 transition-colors text-left"
+                        >
+                          <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
+                            <span className="text-xs font-bold text-purple-400">P</span>
+                          </div>
+                          <span className="text-white font-medium">{chain.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
+            {/* Available Balance */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-300">Amount</label>
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-400">Available Balance</span>
+                <span className="text-white font-semibold">
+                  {isLoadingEoaBalance ? 'Loading...' : (eoaBalance?.formatted || '0.00')} USDC
+                </span>
+              </div>
+            </div>
+
+            {/* Amount Input */}
+            <div className="space-y-2">
+              <label className="text-xs text-zinc-400 uppercase tracking-wide">AMOUNT</label>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -257,12 +412,13 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
                   placeholder="0.00"
                   min="0"
                   step="0.01"
-                  className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />
-                <span className="text-zinc-400">USDC</span>
+                <span className="text-zinc-400 text-sm">USDC</span>
               </div>
             </div>
 
+            {/* Percentage Buttons */}
             <div className="grid grid-cols-4 gap-2">
               {[25, 50, 75, 100].map((percentage) => (
                 <Button
@@ -270,17 +426,18 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
                   variant="outline"
                   size="sm"
                   onClick={() => setPercentage(percentage)}
-                  className="bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-white"
+                  className="bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-white text-sm"
                 >
                   {percentage === 100 ? 'MAX' : `${percentage}%`}
                 </Button>
               ))}
             </div>
 
+            {/* Transfer Button */}
             <Button
               onClick={handleDeposit}
-              disabled={!amount || isProcessing || isWaitingTx || !hasProxyWallet}
-              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold"
+              disabled={!amount || isProcessing || isWaitingTx || !hasProxyWallet || !isPolygon || isLoadingEoaBalance}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isProcessing || isWaitingTx ? (
                 <>
@@ -292,9 +449,15 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
               )}
             </Button>
 
+            {/* Error Messages */}
             {!hasProxyWallet && (
               <p className="text-xs text-yellow-500 text-center">
                 Please deploy your proxy wallet first in the setup page
+              </p>
+            )}
+            {!isPolygon && (
+              <p className="text-xs text-yellow-500 text-center">
+                Please switch to Polygon network to deposit USDC
               </p>
             )}
           </div>
@@ -316,7 +479,7 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
             <div className="space-y-2">
               <label className="text-sm text-zinc-400">Available in Trading Wallet</label>
               <div className="text-2xl font-bold text-white">
-                {proxyBalance?.formatted || '0.00'} USDC
+                {isLoadingProxyBalance ? 'Loading...' : (proxyBalance?.formatted || '0.00')} USDC
               </div>
             </div>
 
@@ -335,8 +498,20 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
             </Button>
           </div>
         )}
+
+        {/* Back Link */}
+        {action && (
+          <div className="text-center pt-2">
+            <button
+              onClick={() => setAction(null)}
+              className="text-sm text-white/70 hover:text-white transition-colors flex items-center gap-1 mx-auto"
+            >
+              <ChevronDown className="h-4 w-4 rotate-90" />
+              Back
+            </button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
 }
-
