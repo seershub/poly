@@ -9,6 +9,7 @@ import {
   useWalletClient,
   useWaitForTransactionReceipt,
   useChainId,
+  usePublicClient,
 } from 'wagmi';
 import { parseUnits } from 'viem';
 import { POLYGON_USDC_ADDRESS, POLYMARKET_CLOB_ADDRESS, USDC_DECIMALS, POLYGON_CHAIN_ID } from '@/lib/constants';
