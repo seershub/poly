@@ -265,6 +265,10 @@ export function usePlacePrediction() {
       // Initialize CLOB client with proxy wallet address as funder
       // Per Polymarket docs: Pass proxy wallet address as funder parameter
       // This ensures orders are placed from the proxy wallet where USDC is held
+      // CRITICAL: proxyWalletAddress must exist at this point (checked earlier)
+      if (!proxyWalletAddress) {
+        throw new Error('Proxy wallet address not available. Please ensure your proxy wallet is deployed.');
+      }
       const clobClient = initializeClobClient(credentials, proxyWalletAddress);
 
       // Place the order
