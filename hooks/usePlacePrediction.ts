@@ -74,12 +74,17 @@ export function usePlacePrediction() {
     },
   });
 
-  // Get USDC allowance for CLOB contract
+  // CRITICAL: Get USDC allowance from proxy wallet (not EOA)
+  // Per Polymarket docs: USDC is in proxy wallet, so allowance must be checked from proxy wallet
+  const allowanceOwner = proxyWalletAddress || address; // Use proxy wallet if available
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: POLYGON_USDC_ADDRESS,
     abi: USDC_ABI,
     functionName: 'allowance',
-    args: address && [address, POLYMARKET_CLOB_ADDRESS],
+    args: allowanceOwner && [allowanceOwner, POLYMARKET_CLOB_ADDRESS],
+    query: {
+      enabled: !!allowanceOwner && isPolygon, // Only fetch when address is available AND on Polygon
+    },
   });
 
   // Write contract hook for approval
@@ -173,24 +178,37 @@ export function usePlacePrediction() {
 
       console.log('✅ USDC balance check passed');
 
-      // CRITICAL: Per Polymarket docs - Check allowance from proxy wallet, not EOA
-      // Allowance must be set from proxy wallet to CLOB contract
-      if (!publicClient || !proxyWalletAddress) {
-        throw new Error('Public client or proxy wallet address not available');
+      // CRITICAL: Per Polymarket docs - Check allowance from the wallet that holds USDC
+      // If proxy wallet exists, check from proxy wallet. Otherwise check from EOA.
+      if (!publicClient) {
+        throw new Error('Public client not available');
       }
+      
+      // Use proxy wallet if available, otherwise use EOA (for first-time users)
+      const allowanceOwner = proxyWalletAddress || address;
+      if (!allowanceOwner) {
+        throw new Error('No wallet address available for allowance check');
+      }
+
+      console.log('Checking USDC allowance:', {
+        allowanceOwner,
+        isProxyWallet: !!proxyWalletAddress,
+        proxyWalletAddress,
+        eoaAddress: address,
+      });
 
       const proxyAllowanceResult = await publicClient.readContract({
         address: POLYGON_USDC_ADDRESS,
         abi: USDC_ABI,
         functionName: 'allowance',
-        args: [proxyWalletAddress, POLYMARKET_CLOB_ADDRESS],
+        args: [allowanceOwner, POLYMARKET_CLOB_ADDRESS],
       });
 
       // readContract already returns bigint, no need to convert
       const currentAllowance = proxyAllowanceResult as bigint;
 
-      console.log('Checking USDC allowance from proxy wallet:', {
-        proxyWalletAddress,
+      console.log('USDC allowance check result:', {
+        allowanceOwner,
         currentAllowance: currentAllowance.toString(),
         requiredUsdc: requiredUsdc.toString(),
         needsApproval: currentAllowance < requiredUsdc,
