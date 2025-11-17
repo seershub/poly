@@ -80,7 +80,7 @@ export default function TradingWalletSetupPage() {
     address: POLYGON_USDC_ADDRESS,
     abi: USDC_ABI,
     functionName: 'allowance',
-    args: allowanceOwner && [allowanceOwner, POLYMARKET_CLOB_ADDRESS],
+    args: allowanceOwner ? [allowanceOwner as `0x${string}`, POLYMARKET_CLOB_ADDRESS] : undefined,
     query: {
       enabled: !!allowanceOwner,
     },
