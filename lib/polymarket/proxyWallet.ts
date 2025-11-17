@@ -34,12 +34,12 @@ const GNOSIS_SAFE_FACTORY_ABI = [
  * Per Polymarket docs: Each user has their own proxy wallet address
  * 
  * @param eoaAddress - The EOA (Externally Owned Account) address (MetaMask/MagicLink)
- * @param publicClient - Viem public client for contract reads
+ * @param publicClient - Viem public client for contract reads (or Wagmi's usePublicClient return type)
  * @returns The proxy wallet address if it exists, null otherwise
  */
 export async function getProxyWalletAddress(
   eoaAddress: Address,
-  publicClient: PublicClient
+  publicClient: PublicClient | any // Accept both Viem PublicClient and Wagmi's usePublicClient return type
 ): Promise<Address | null> {
   try {
     // Per Polymarket docs: Proxy wallets are deployed via factory contracts
@@ -132,14 +132,14 @@ export async function deployProxyWallet(
  * Per Polymarket docs: Proxy wallets are created automatically on first use
  * 
  * @param eoaAddress - The EOA address
- * @param publicClient - Viem public client for reads
+ * @param publicClient - Viem public client for reads (or Wagmi's usePublicClient return type)
  * @param walletClient - Wagmi wallet client for writes
  * @param walletType - Wallet type ('metamask' or 'magiclink')
  * @returns The proxy wallet address
  */
 export async function ensureProxyWallet(
   eoaAddress: Address,
-  publicClient: PublicClient,
+  publicClient: PublicClient | any, // Accept both Viem PublicClient and Wagmi's usePublicClient return type
   walletClient: WalletClient,
   walletType: 'metamask' | 'magiclink' = 'metamask'
 ): Promise<Address> {
