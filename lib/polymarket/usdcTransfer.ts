@@ -6,6 +6,7 @@
  */
 
 import { type Address, type WalletClient, type PublicClient, parseUnits, formatUnits } from 'viem';
+import { polygon } from 'viem/chains';
 import { POLYGON_USDC_ADDRESS, USDC_DECIMALS } from '@/lib/constants';
 
 // USDC ERC20 ABI (transfer functions)
@@ -62,6 +63,7 @@ export async function depositUsdcToProxyWallet(
 
     // Transfer USDC from EOA to proxy wallet
     const hash = await walletClient.writeContract({
+      chain: polygon,
       address: POLYGON_USDC_ADDRESS,
       abi: USDC_ABI,
       functionName: 'transfer',
