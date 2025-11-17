@@ -186,7 +186,8 @@ export function usePlacePrediction() {
         args: [proxyWalletAddress, POLYMARKET_CLOB_ADDRESS],
       });
 
-      const currentAllowance = BigInt(proxyAllowanceResult as string);
+      // readContract already returns bigint, no need to convert
+      const currentAllowance = proxyAllowanceResult as bigint;
 
       console.log('Checking USDC allowance from proxy wallet:', {
         proxyWalletAddress,
