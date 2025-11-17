@@ -13,7 +13,7 @@
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProxyWalletAddress, ensureProxyWallet } from '@/lib/polymarket/proxyWallet';
-import type { Address } from 'viem';
+import type { Address, PublicClient } from 'viem';
 
 /**
  * Hook to get or create a proxy wallet for the connected user
@@ -22,8 +22,12 @@ import type { Address } from 'viem';
 export function useProxyWallet() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
-  const publicClient = usePublicClient();
+  const publicClientData = usePublicClient();
   const queryClient = useQueryClient();
+
+  // Type assertion: Wagmi's usePublicClient returns PublicClient but TypeScript types can be incompatible
+  // This is safe because Wagmi v2's usePublicClient() actually returns a PublicClient instance
+  const publicClient = publicClientData as PublicClient | undefined;
 
   // Query to check if proxy wallet exists
   const {
