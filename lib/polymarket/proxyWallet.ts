@@ -16,22 +16,16 @@ import { type Address, type WalletClient, type PublicClient, getAddress } from '
 import { POLYMARKET_GNOSIS_SAFE_FACTORY, POLYMARKET_PROXY_FACTORY } from '@/lib/constants';
 
 // Gnosis Safe Factory ABI (simplified - for proxy wallet lookup)
+// Per PolygonScan: Polymarket uses computeProxyAddress(user) instead of getAddress
 const GNOSIS_SAFE_FACTORY_ABI = [
   {
-    name: 'getAddress',
+    name: 'computeProxyAddress',
     type: 'function',
     stateMutability: 'view',
     inputs: [
-      { name: 'owners', type: 'address[]' },
-      { name: 'threshold', type: 'uint256' },
-      { name: 'to', type: 'address' },
-      { name: 'data', type: 'bytes' },
-      { name: 'fallbackHandler', type: 'address' },
-      { name: 'paymentToken', type: 'address' },
-      { name: 'payment', type: 'uint256' },
-      { name: 'paymentReceiver', type: 'address' },
+      { name: 'user', type: 'address' },
     ],
-    outputs: [{ name: 'proxy', type: 'address' }],
+    outputs: [{ name: '', type: 'address' }],
   },
 ] as const;
 
@@ -56,23 +50,13 @@ export async function getProxyWalletAddress(
     // For MetaMask users: Check Gnosis Safe Factory
     // Per Polymarket docs: Gnosis Safe Factory creates 1 of 1 multisig for MetaMask users
     try {
-      // Note: Gnosis Safe Factory uses getAddress to predict the proxy address
-      // For a 1 of 1 multisig, owners = [eoaAddress], threshold = 1
-      // We need to check if the contract exists at that address
+      // Per PolygonScan: Polymarket's Safe Proxy Factory uses computeProxyAddress(user)
+      // This is simpler than the standard Gnosis Safe Factory getAddress function
       const predictedAddress = await publicClient.readContract({
         address: POLYMARKET_GNOSIS_SAFE_FACTORY,
         abi: GNOSIS_SAFE_FACTORY_ABI,
-        functionName: 'getAddress',
-        args: [
-          [eoaAddress], // owners: single owner (1 of 1 multisig)
-          BigInt(1), // threshold: 1 signature required
-          '0x0000000000000000000000000000000000000000', // to: zero address
-          '0x', // data: empty
-          '0x0000000000000000000000000000000000000000', // fallbackHandler: zero address
-          '0x0000000000000000000000000000000000000000', // paymentToken: zero address
-          BigInt(0), // payment: 0
-          '0x0000000000000000000000000000000000000000', // paymentReceiver: zero address
-        ],
+        functionName: 'computeProxyAddress',
+        args: [eoaAddress], // user: the EOA address that will own the proxy
       });
 
       // Check if contract exists at predicted address
