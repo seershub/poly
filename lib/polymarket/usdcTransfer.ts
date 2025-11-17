@@ -62,8 +62,10 @@ export async function depositUsdcToProxyWallet(
     });
 
     // Transfer USDC from EOA to proxy wallet
+    // Note: walletClient already has account information, but we need to pass it explicitly
     const hash = await walletClient.writeContract({
       chain: polygon,
+      account: walletClient.account,
       address: POLYGON_USDC_ADDRESS,
       abi: USDC_ABI,
       functionName: 'transfer',
