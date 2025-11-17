@@ -7,8 +7,8 @@ import { config } from '@/lib/wagmi';
 import { useState } from 'react';
 import { polygon } from 'viem/chains';
 
-// Privy Wagmi Connector - enables Privy wallets to work with Wagmi
-import { PrivyWagmiConnector } from '@privy-io/wagmi';
+// Note: Privy wallets work with Wagmi through PrivyProvider's built-in integration
+// No separate @privy-io/wagmi package needed for basic functionality
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -56,11 +56,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }}
     >
       <WagmiProvider config={config}>
-        <PrivyWagmiConnector wagmiConfig={config}>
-          <QueryClientProvider client={queryClient}>
-            {children}
-          </QueryClientProvider>
-        </PrivyWagmiConnector>
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
       </WagmiProvider>
     </PrivyProvider>
   );
