@@ -83,9 +83,11 @@ export async function generateApiCredentials(
  * Initialize CLOB client with credentials and optional builder configuration
  * 
  * Per Polymarket docs: ClobClient constructor signature:
- * new ClobClient(host: string, chainId: number, signer?: Signer, creds?: ApiCredentials, builderConfig?: BuilderConfig)
+ * new ClobClient(host: string, chainId: number, signer?: Signer, creds?: ApiCredentials, builderConfig?: BuilderConfig, funder?: string)
  *
  * @param credentials - User API credentials (generated from wallet via deriveApiKey)
+ * @param proxyWalletAddress - Optional proxy wallet address (funder parameter)
+ *                              Per Polymarket docs: "This is the address listed below your profile picture when using the Polymarket site"
  *
  * Builder configuration is automatically loaded from environment variables:
  * - POLY_BUILDER_API_KEY
@@ -95,18 +97,29 @@ export async function generateApiCredentials(
  *
  * If builder keys are configured, all orders will be attributed to your builder account
  * for Polymarket Builder Grant Program tracking.
+ * 
+ * CRITICAL: Per Polymarket docs - When using proxy wallet, pass it as funder parameter
+ * This ensures orders are placed from the proxy wallet where USDC is held.
  */
 export function initializeClobClient(
-  credentials: ApiCredentials
+  credentials: ApiCredentials,
+  proxyWalletAddress?: string
 ): ClobClient {
   // Per Polymarket docs: ClobClient constructor
   // signer is optional when using API credentials
   // creds should be passed as 4th parameter
   // builderConfig is optional 5th parameter
+  // funder (proxy wallet address) is optional 6th parameter
 
   const builderConfig = getBuilderConfig();
 
-  return new ClobClient(
+  // Per Polymarket docs: ClobClient constructor signature:
+  // new ClobClient(host, chainId, signer, creds, signatureType, funder)
+  // signatureType: 0 = EOA, 1 = Magic/Email, 2 = Metamask
+  // funder: Proxy wallet address (where USDC is held)
+  const signatureType = proxyWalletAddress ? 2 : 0; // 2 = Metamask (default), 0 = EOA if no proxy
+  
+  const clobClient = new ClobClient(
     CLOB_API_URL,
     POLYGON_CHAIN_ID,
     undefined, // signer (optional - not needed when using API credentials)
@@ -115,8 +128,11 @@ export function initializeClobClient(
       secret: credentials.apiSecret,
       passphrase: credentials.apiPassphrase,
     },
-    builderConfig as any // Builder config (optional, for grant program)
+    signatureType, // signatureType: 0 = EOA, 1 = Magic/Email, 2 = Metamask
+    proxyWalletAddress // funder (proxy wallet address) - per Polymarket docs: "This is your Polymarket Profile Address, where you send USDC to"
   );
+
+  return clobClient;
 }
 
 /**

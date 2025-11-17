@@ -29,13 +29,15 @@ export function WalletConnect() {
   }, [isConnected, credentials, isGenerating, generateCredentials]);
 
   // Auto-create proxy wallet if it doesn't exist (per Polymarket docs)
+  // Per Polymarket docs: "When a user first uses Polymarket.com to trade they are prompted to create a wallet"
   useEffect(() => {
     if (isConnected && address && !isLoadingProxy && !hasProxyWallet && !isCreatingProxy) {
       // Per Polymarket docs: Proxy wallets are created automatically on first use
-      // We'll prompt the user to create one when needed
-      console.log('Proxy wallet not found. User can create one when making first trade.');
+      // Automatically create proxy wallet when wallet connects (like other dApps)
+      console.log('Proxy wallet not found. Creating automatically via Polymarket Relayer...');
+      createProxyWallet('metamask'); // Default to metamask, can be detected dynamically
     }
-  }, [isConnected, address, isLoadingProxy, hasProxyWallet, isCreatingProxy]);
+  }, [isConnected, address, isLoadingProxy, hasProxyWallet, isCreatingProxy, createProxyWallet]);
 
   if (isConnected && address) {
     return (
