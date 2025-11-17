@@ -172,6 +172,18 @@ export default function TradingWalletSetupPage() {
     approveUsdc,
   ]);
 
+  // Don't show setup page if already completed
+  useEffect(() => {
+    if (displayAddress && typeof window !== 'undefined') {
+      const setupCompleted = localStorage.getItem(`poly-setup-completed-${displayAddress}`);
+      if (setupCompleted === 'true' && window.location.pathname === '/setup') {
+        // Setup already completed, redirect to home
+        console.log('Setup already completed, redirecting to home...');
+        window.location.href = '/';
+      }
+    }
+  }, [displayAddress]);
+
   // Redirect if not connected
   useEffect(() => {
     if (!isWalletConnected) {
