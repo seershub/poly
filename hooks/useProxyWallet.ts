@@ -10,24 +10,24 @@
 
 'use client';
 
-import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
+import { useAccount, useWalletClient } from 'wagmi';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProxyWalletAddress, ensureProxyWallet } from '@/lib/polymarket/proxyWallet';
-import type { Address, PublicClient } from 'viem';
+import type { Address } from 'viem';
+import { config } from '@/lib/wagmi';
 
 /**
  * Hook to get or create a proxy wallet for the connected user
  * Per Polymarket docs: Proxy wallets are created automatically on first use
  */
 export function useProxyWallet() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { data: walletClient } = useWalletClient();
-  const publicClientData = usePublicClient();
   const queryClient = useQueryClient();
 
-  // Type assertion: Wagmi's usePublicClient returns PublicClient but TypeScript types can be incompatible
-  // This is safe because Wagmi v2's usePublicClient() actually returns a PublicClient instance
-  const publicClient = publicClientData as PublicClient | undefined;
+  // Per Wagmi v2 docs: Use config.getPublicClient({ chainId }) for type-safe PublicClient
+  // This is the recommended approach when you need explicit chain selection
+  const publicClient = chainId ? config.getPublicClient({ chainId }) : undefined;
 
   // Query to check if proxy wallet exists
   const {
