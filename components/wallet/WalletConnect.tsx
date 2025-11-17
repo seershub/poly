@@ -36,16 +36,22 @@ export function WalletConnect() {
     }
   }, [isConnected, authenticated, credentials, isGenerating, generateCredentials]);
 
-  // Auto-create proxy wallet if it doesn't exist (per Polymarket docs)
+  // Redirect to setup page if wallet is connected but setup is not complete
   // Per Polymarket docs: "When a user first uses Polymarket.com to trade they are prompted to create a wallet"
   useEffect(() => {
-    if ((isConnected || authenticated) && address && !isLoadingProxy && !hasProxyWallet && !isCreatingProxy) {
-      // Per Polymarket docs: Proxy wallets are created automatically on first use
-      // Automatically create proxy wallet when wallet connects (like other dApps)
-      console.log('Proxy wallet not found. Creating automatically via Polymarket Relayer...');
-      createProxyWallet('metamask'); // Default to metamask, can be detected dynamically
+    if ((isConnected || authenticated) && address) {
+      // Check if setup is needed (proxy wallet, USDC approval, or API credentials missing)
+      const needsSetup = !hasProxyWallet || !credentials;
+      
+      if (needsSetup && typeof window !== 'undefined') {
+        const currentPath = window.location.pathname;
+        if (currentPath !== '/setup') {
+          // Redirect to setup page
+          window.location.href = '/setup';
+        }
+      }
     }
-  }, [isConnected, authenticated, address, isLoadingProxy, hasProxyWallet, isCreatingProxy, createProxyWallet]);
+  }, [isConnected, authenticated, address, hasProxyWallet, credentials]);
 
   // Show connected state if either Wagmi or Privy is connected
   const isWalletConnected = isConnected || authenticated;
