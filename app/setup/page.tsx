@@ -13,7 +13,7 @@ import { POLYGON_USDC_ADDRESS, POLYMARKET_CLOB_ADDRESS, USDC_DECIMALS } from '@/
 import { approveTokenViaRelayer } from '@/lib/polymarket/relayerClient';
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits } from 'viem';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 // USDC ERC20 ABI
 const USDC_ABI = [
