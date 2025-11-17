@@ -40,4 +40,5 @@ export interface MatchFilters {
   dateRange?: 'today' | 'week' | 'month' | 'all';
   status?: 'active' | 'closed' | 'all';
   sortBy?: 'volume' | 'liquidity' | 'date';
+  platform?: 'all' | 'polymarket' | 'kalshi'; // Platform filter
 }

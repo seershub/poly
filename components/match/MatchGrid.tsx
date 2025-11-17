@@ -14,13 +14,14 @@ export function MatchGrid() {
     dateRange: 'week',
     status: 'active',
     sortBy: 'volume',
+    platform: 'all', // Default: show all platforms
   });
 
   // Fetch markets from both platforms
   const { matches: polymarketMatches, isLoading: isLoadingPoly, error: polyError } = useFilteredMatches(filters);
   const { data: kalshiMatches, isLoading: isLoadingKalshi, error: kalshiError } = useKalshiMarkets();
 
-  // Combine and sort markets
+  // Combine and sort markets with platform filter
   const matches = useMemo(() => {
     const allMatches: ParsedMatch[] = [
       ...(polymarketMatches || []).map(m => ({ ...m, chain: 'polygon' as const, platform: 'polymarket' as const })),
@@ -28,9 +29,15 @@ export function MatchGrid() {
       ...(kalshiMatches || []).map(m => ({ ...m, chain: 'none' as const, platform: 'kalshi' as const })),
     ];
 
+    // Apply platform filter
+    let filteredMatches = allMatches;
+    if (filters.platform && filters.platform !== 'all') {
+      filteredMatches = allMatches.filter(m => m.platform === filters.platform);
+    }
+
     // Sort by start time (earliest first)
-    return allMatches.sort((a, b) => a.matchDate.getTime() - b.matchDate.getTime());
-  }, [polymarketMatches, kalshiMatches]);
+    return filteredMatches.sort((a, b) => a.matchDate.getTime() - b.matchDate.getTime());
+  }, [polymarketMatches, kalshiMatches, filters.platform]);
 
   const isLoading = isLoadingPoly || isLoadingKalshi;
   const error = polyError || kalshiError;

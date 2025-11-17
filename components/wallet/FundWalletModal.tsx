@@ -89,9 +89,9 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
   // CRITICAL: Check if on Polygon network
   const isPolygon = chainId === POLYGON_CHAIN_ID;
 
-  // CRITICAL FIX: Get EOA USDC balance with explicit chainId parameter
-  // Per Wagmi v2 docs: useBalance works reliably with explicit chainId
-  // No manual fallback needed - Wagmi v2 useBalance is 100% reliable when properly configured
+  // CRITICAL FIX: Get EOA USDC balance 
+  // Try to fetch from Polygon regardless of current chain (cross-chain balance check)
+  // Per Wagmi v2 docs: useBalance with chainId can fetch balances from different chains
   const { 
     data: eoaBalance, 
     refetch: refetchEoaBalance, 
@@ -100,14 +100,17 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
   } = useBalance({
     address,
     token: POLYGON_USDC_ADDRESS,
-    chainId: polygon.id, // CRITICAL: Explicitly specify chain
+    chainId: polygon.id, // Always fetch from Polygon (where USDC is held)
     query: {
       enabled: !!address && open,
       refetchInterval: 5000, // Refetch every 5 seconds to watch for balance changes
+      retry: 3, // Retry 3 times if fails
+      retryDelay: 1000, // Wait 1s between retries
     },
   });
 
-  // CRITICAL FIX: Get proxy wallet USDC balance with explicit chainId parameter
+  // CRITICAL FIX: Get proxy wallet USDC balance
+  // Always fetch from Polygon (where USDC is held)
   const { 
     data: proxyBalance, 
     refetch: refetchProxyBalance, 
@@ -116,10 +119,12 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
   } = useBalance({
     address: proxyWalletAddress || undefined,
     token: POLYGON_USDC_ADDRESS,
-    chainId: polygon.id, // CRITICAL: Explicitly specify chain
+    chainId: polygon.id, // Always fetch from Polygon
     query: {
       enabled: !!proxyWalletAddress && open,
       refetchInterval: 5000, // Refetch every 5 seconds to watch for balance changes
+      retry: 3, // Retry 3 times if fails
+      retryDelay: 1000, // Wait 1s between retries
     },
   });
 

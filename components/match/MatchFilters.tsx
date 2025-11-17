@@ -23,6 +23,12 @@ export function MatchFilters({ filters, onFiltersChange }: MatchFiltersProps) {
     { value: 'date', label: 'Date' },
   ] as const;
 
+  const platformOptions = [
+    { value: 'all', label: 'All Platforms' },
+    { value: 'polymarket', label: 'Polymarket' },
+    { value: 'kalshi', label: 'Kalshi' },
+  ] as const;
+
   const updateFilter = (key: keyof FilterType, value: any) => {
     onFiltersChange({ ...filters, [key]: value });
   };
@@ -32,6 +38,23 @@ export function MatchFilters({ filters, onFiltersChange }: MatchFiltersProps) {
       <div className="flex items-center gap-2 text-sm font-medium">
         <Filter className="h-4 w-4" />
         Filters
+      </div>
+
+      {/* Platform Filter */}
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">Platform</label>
+        <div className="flex gap-2">
+          {platformOptions.map((platform) => (
+            <Button
+              key={platform.value}
+              variant={filters.platform === platform.value ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => updateFilter('platform', platform.value)}
+            >
+              {platform.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {/* Date Range Filter */}
