@@ -1,6 +1,7 @@
 'use client';
 
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
+import { usePrivy } from '@privy-io/react-auth';
 import { Button } from '@/components/ui/button';
 import { Wallet, LogOut, Shield } from 'lucide-react';
 import { truncateAddress } from '@/lib/utils';
@@ -12,6 +13,13 @@ export function WalletConnect() {
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
+  const { 
+    ready, 
+    authenticated, 
+    login, 
+    logout, 
+    user 
+  } = usePrivy();
   const { credentials, generateCredentials, isGenerating } = useApiCredentials();
   const { 
     proxyWalletAddress, 
@@ -23,27 +31,31 @@ export function WalletConnect() {
 
   // Auto-generate credentials when wallet connects
   useEffect(() => {
-    if (isConnected && !credentials && !isGenerating) {
+    if ((isConnected || authenticated) && !credentials && !isGenerating) {
       generateCredentials();
     }
-  }, [isConnected, credentials, isGenerating, generateCredentials]);
+  }, [isConnected, authenticated, credentials, isGenerating, generateCredentials]);
 
   // Auto-create proxy wallet if it doesn't exist (per Polymarket docs)
   // Per Polymarket docs: "When a user first uses Polymarket.com to trade they are prompted to create a wallet"
   useEffect(() => {
-    if (isConnected && address && !isLoadingProxy && !hasProxyWallet && !isCreatingProxy) {
+    if ((isConnected || authenticated) && address && !isLoadingProxy && !hasProxyWallet && !isCreatingProxy) {
       // Per Polymarket docs: Proxy wallets are created automatically on first use
       // Automatically create proxy wallet when wallet connects (like other dApps)
       console.log('Proxy wallet not found. Creating automatically via Polymarket Relayer...');
       createProxyWallet('metamask'); // Default to metamask, can be detected dynamically
     }
-  }, [isConnected, address, isLoadingProxy, hasProxyWallet, isCreatingProxy, createProxyWallet]);
+  }, [isConnected, authenticated, address, isLoadingProxy, hasProxyWallet, isCreatingProxy, createProxyWallet]);
 
-  if (isConnected && address) {
+  // Show connected state if either Wagmi or Privy is connected
+  const isWalletConnected = isConnected || authenticated;
+  const displayAddress = address || user?.wallet?.address;
+
+  if (isWalletConnected && displayAddress) {
     return (
       <div className="flex items-center gap-3">
         <div className="hidden sm:flex flex-col items-end">
-          <p className="text-sm font-medium">{truncateAddress(address)}</p>
+          <p className="text-sm font-medium">{truncateAddress(displayAddress)}</p>
           <div className="flex items-center gap-2">
             {credentials ? (
               <p className="text-xs text-green-500">API Ready</p>
@@ -66,7 +78,13 @@ export function WalletConnect() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => disconnect()}
+          onClick={() => {
+            if (authenticated) {
+              logout();
+            } else {
+              disconnect();
+            }
+          }}
           className="gap-2"
         >
           <LogOut className="h-4 w-4" />
@@ -76,19 +94,24 @@ export function WalletConnect() {
     );
   }
 
+  // Show Privy login button (more user-friendly than Wagmi connectors)
+  if (!ready) {
+    return (
+      <Button disabled size="sm" className="gap-2">
+        <Wallet className="h-4 w-4" />
+        Loading...
+      </Button>
+    );
+  }
+
   return (
-    <div className="flex gap-2">
-      {connectors.map((connector) => (
-        <Button
-          key={connector.id}
-          onClick={() => connect({ connector })}
-          className="gap-2"
-          size="sm"
-        >
-          <Wallet className="h-4 w-4" />
-          Connect Wallet
-        </Button>
-      ))}
-    </div>
+    <Button
+      onClick={() => login()}
+      className="gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white border-0"
+      size="sm"
+    >
+      <Wallet className="h-4 w-4" />
+      Sign In
+    </Button>
   );
 }

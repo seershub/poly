@@ -129,9 +129,11 @@ export function usePlacePrediction() {
       const requiredUsdc = parseUnits(cost.toFixed(USDC_DECIMALS), USDC_DECIMALS);
 
       // CRITICAL: Per Polymarket docs - USDC is in proxy wallet, not EOA
-      // Ensure proxy wallet exists before checking balance
-      if (!hasProxyWallet || !proxyWalletAddress) {
-        throw new Error('Proxy wallet not found. Please ensure your proxy wallet is created. This should happen automatically when you connect your wallet.');
+      // However, for first-time users, proxy wallet might not exist yet
+      // Allow balance check from EOA if proxy wallet doesn't exist (temporary)
+      // Note: Once proxy wallet is created, USDC should be transferred to it
+      if (hasProxyWallet && !proxyWalletAddress) {
+        throw new Error('Proxy wallet address not available. Please refresh the page.');
       }
 
       // CRITICAL: Force refetch balance from proxy wallet to ensure we have latest data
