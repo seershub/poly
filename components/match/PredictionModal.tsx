@@ -18,8 +18,8 @@ import type { ParsedMatch, PredictionSide } from '@/types/match';
 import { TrendingUp, TrendingDown, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useChainId, useSwitchChain } from 'wagmi';
-import { POLYGON_CHAIN_ID, ARBITRUM_CHAIN_ID } from '@/lib/constants';
-import { polygon, arbitrum } from 'viem/chains';
+import { POLYGON_CHAIN_ID, ETHEREUM_CHAIN_ID, BASE_CHAIN_ID } from '@/lib/constants';
+import { polygon, mainnet, base } from 'viem/chains';
 
 interface PredictionModalProps {
   match: ParsedMatch;
@@ -34,11 +34,26 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
   const { predict, isPending, isApproving, error } = usePlacePrediction();
   
   // CRITICAL: Determine required chain based on match platform
-  const requiredChain = match.chain === 'arbitrum' ? ARBITRUM_CHAIN_ID : POLYGON_CHAIN_ID;
-  const isOnCorrectChain = chainId === requiredChain;
+  const getRequiredChain = () => {
+    if (match.chain === 'ethereum') return ETHEREUM_CHAIN_ID;
+    if (match.chain === 'base') return BASE_CHAIN_ID;
+    if (match.chain === 'polygon') return POLYGON_CHAIN_ID;
+    // Kalshi (none) or Solana - no chain switch needed
+    return POLYGON_CHAIN_ID; // Default to Polygon
+  };
+  
+  const requiredChain = getRequiredChain();
+  const isOnCorrectChain = match.chain === 'none' || match.chain === 'solana' || chainId === requiredChain;
   
   // Get chain name for display
-  const chainName = match.chain === 'arbitrum' ? 'Arbitrum' : 'Polygon';
+  const getChainName = () => {
+    if (match.chain === 'ethereum') return 'Ethereum';
+    if (match.chain === 'base') return 'Base';
+    if (match.chain === 'polygon') return 'Polygon';
+    if (match.chain === 'solana') return 'Solana';
+    return 'Polygon'; // Default
+  };
+  const chainName = getChainName();
 
   // CRITICAL: Share-based input (NOT amount-based)
   const [shares, setShares] = useState(1.0);
@@ -55,7 +70,18 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
 
   const handleSwitchChain = async () => {
     try {
-      const targetChain = match.chain === 'arbitrum' ? arbitrum : polygon;
+      let targetChain;
+      if (match.chain === 'ethereum') targetChain = mainnet;
+      else if (match.chain === 'base') targetChain = base;
+      else if (match.chain === 'polygon') targetChain = polygon;
+      else {
+        toast({
+          title: 'Invalid Chain',
+          description: 'Chain switching not supported for this market',
+          variant: 'destructive',
+        });
+        return;
+      }
       await switchChain({ chainId: targetChain.id });
     } catch (error: any) {
       console.error('Error switching chain:', error);
@@ -77,8 +103,9 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
       return;
     }
 
-    // CRITICAL: Check if on correct chain (Polygon for Polymarket, Arbitrum for Kalshi)
-    if (!isOnCorrectChain) {
+    // CRITICAL: Check if on correct chain (only for blockchain-based platforms)
+    // Kalshi is centralized API, no chain required
+    if (match.chain !== 'none' && match.chain !== 'solana' && !isOnCorrectChain) {
       toast({
         title: 'Wrong Network',
         description: `Please switch to ${chainName} network (Chain ID: ${requiredChain}). Current: ${chainId}`,

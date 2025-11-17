@@ -15,7 +15,7 @@ export interface ParsedMatch {
   active: boolean;
   closed: boolean;
   image?: string;
-  chain?: 'polygon' | 'arbitrum'; // Chain where the market exists
+  chain?: 'polygon' | 'ethereum' | 'base' | 'solana' | 'none'; // Chain where the market exists (none for centralized APIs like Kalshi)
   platform?: 'polymarket' | 'kalshi'; // Platform name
 }
 

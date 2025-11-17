@@ -24,7 +24,8 @@ export function MatchGrid() {
   const matches = useMemo(() => {
     const allMatches: ParsedMatch[] = [
       ...(polymarketMatches || []).map(m => ({ ...m, chain: 'polygon' as const, platform: 'polymarket' as const })),
-      ...(kalshiMatches || []).map(m => ({ ...m, chain: 'arbitrum' as const, platform: 'kalshi' as const })),
+      // Kalshi is centralized API, no blockchain required
+      ...(kalshiMatches || []).map(m => ({ ...m, chain: 'none' as const, platform: 'kalshi' as const })),
     ];
 
     // Sort by start time (earliest first)

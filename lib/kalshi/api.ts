@@ -2,12 +2,12 @@
  * Kalshi API Integration
  * 
  * Per Kalshi docs: https://docs.kalshi.com
- * Kalshi is a prediction market platform on Arbitrum
+ * Kalshi is a centralized exchange API and doesn't require blockchain integration
  */
 
 import axios from 'axios';
-import { KALSHI_API_URL, KALSHI_API_KEY, KALSHI_API_SECRET, ARBITRUM_CHAIN_ID } from '@/lib/constants';
-import type { Match } from '@/types/match';
+import { KALSHI_API_URL, KALSHI_API_KEY, KALSHI_API_SECRET } from '@/lib/constants';
+import type { ParsedMatch } from '@/types/match';
 
 // Kalshi API Response Types
 interface KalshiMarket {
@@ -34,40 +34,40 @@ interface KalshiMarketsResponse {
 }
 
 /**
- * Convert Kalshi market to Match format
+ * Convert Kalshi market to ParsedMatch format
  */
-function kalshiMarketToMatch(market: KalshiMarket): Match {
+function kalshiMarketToMatch(market: KalshiMarket): ParsedMatch {
   // Calculate price from yes_bid/yes_ask (0-100 scale, convert to 0-1)
   const yesPrice = market.yes_bid ? market.yes_bid / 100 : 0.5;
   const noPrice = market.no_bid ? market.no_bid / 100 : 0.5;
 
   return {
     id: market.ticker,
-    title: market.title,
-    subtitle: market.subtitle,
-    category: market.category,
-    subcategory: market.subcategory,
-    startTime: new Date(market.open_time).getTime(),
-    endTime: new Date(market.close_time).getTime(),
-    outcomes: [
-      {
-        id: `${market.ticker}-yes`,
-        name: 'Yes',
+    slug: market.ticker.toLowerCase().replace(/\s+/g, '-'),
+    homeTeam: market.title.split(' vs ')[0] || 'Yes', // Attempt to parse teams from title
+    awayTeam: market.title.split(' vs ')[1] || 'No', // Attempt to parse teams from title
+    league: market.category || 'General',
+    matchDate: new Date(market.open_time),
+    outcomes: {
+      YES: {
+        tokenId: `${market.ticker}-yes`,
+        outcome: 'Yes',
         price: yesPrice,
-        volume: market.volume || 0,
+        impliedOdds: yesPrice * 100,
       },
-      {
-        id: `${market.ticker}-no`,
-        name: 'No',
+      NO: {
+        tokenId: `${market.ticker}-no`,
+        outcome: 'No',
         price: noPrice,
-        volume: market.volume || 0,
+        impliedOdds: noPrice * 100,
       },
-    ],
+    },
     volume: market.volume || 0,
     liquidity: market.liquidity || 0,
-    chain: 'arbitrum', // Kalshi is on Arbitrum
+    active: market.status === 'open',
+    closed: market.status === 'closed',
+    chain: 'none', // Kalshi is centralized API, no blockchain required
     platform: 'kalshi',
-    status: market.status,
   };
 }
 
@@ -78,7 +78,7 @@ function kalshiMarketToMatch(market: KalshiMarket): Match {
 export async function fetchKalshiMarkets(
   category: string = 'soccer',
   limit: number = 50
-): Promise<Match[]> {
+): Promise<ParsedMatch[]> {
   try {
     // Kalshi API requires authentication
     // For now, we'll use a mock approach or public endpoint if available
@@ -119,7 +119,7 @@ export async function fetchKalshiMarkets(
 /**
  * Fetch a single Kalshi market by ticker
  */
-export async function fetchKalshiMarket(ticker: string): Promise<Match | null> {
+export async function fetchKalshiMarket(ticker: string): Promise<ParsedMatch | null> {
   try {
     const response = await axios.get<KalshiMarket>(
       `${KALSHI_API_URL}/markets/${ticker}`,

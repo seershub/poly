@@ -11,12 +11,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAccount, useWalletClient, usePublicClient, useBalance, useWaitForTransactionReceipt, useChainId, useSwitchChain } from 'wagmi';
 import { useProxyWallet } from '@/hooks/useProxyWallet';
-import { POLYGON_USDC_ADDRESS, USDC_DECIMALS, POLYGON_CHAIN_ID } from '@/lib/constants';
+import { POLYGON_USDC_ADDRESS, ETHEREUM_USDC_ADDRESS, BASE_USDC_ADDRESS, USDC_DECIMALS, POLYGON_CHAIN_ID, ETHEREUM_CHAIN_ID, BASE_CHAIN_ID } from '@/lib/constants';
 import { depositUsdcToProxyWallet } from '@/lib/polymarket/usdcTransfer';
 import { parseUnits, formatUnits } from 'viem';
 import { Wallet, ArrowDown, ArrowUp, Loader2, X, ChevronDown, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { polygon } from 'viem/chains';
+import { polygon, mainnet, base } from 'viem/chains';
 
 interface FundWalletModalProps {
   open: boolean;
@@ -45,10 +45,11 @@ const TOKENS: Token[] = [
   {
     symbol: 'USDC',
     name: 'USD Coin',
-    address: POLYGON_USDC_ADDRESS,
+    address: POLYGON_USDC_ADDRESS, // Default to Polygon, will be updated based on selected chain
     decimals: 6,
   },
-  // Future: USDT, ETH, SOL
+  // TODO: Add USDT, ETH when multi-token support is implemented
+  // TODO: SOL requires Solana integration (@solana/web3.js)
 ];
 
 const CHAINS: Chain[] = [
@@ -56,7 +57,15 @@ const CHAINS: Chain[] = [
     id: polygon.id,
     name: 'Polygon',
   },
-  // Future: Ethereum, Base, Solana
+  {
+    id: mainnet.id,
+    name: 'Ethereum',
+  },
+  {
+    id: base.id,
+    name: 'Base',
+  },
+  // TODO: Solana is not EVM-compatible, requires separate integration
 ];
 
 export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {

@@ -22,17 +22,21 @@ export const DATA_API_URL: string = process.env.NEXT_PUBLIC_DATA_API_URL || 'htt
 export const POLYMARKET_RELAYER_URL: string = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com/';
 
 // Chain Configuration
-// Multi-chain support: Polygon (Polymarket) + Arbitrum (Kalshi)
+// Multi-chain support: Polygon (Polymarket), Ethereum, Base
+// Note: Kalshi is a centralized exchange API and doesn't require blockchain integration
 export const POLYGON_CHAIN_ID = 137;
-export const ARBITRUM_CHAIN_ID = 42161;
+export const ETHEREUM_CHAIN_ID = 1;
+export const BASE_CHAIN_ID = 8453;
+// Solana is not EVM-compatible (Chain ID: N/A, requires @solana/web3.js)
 
-// Arbitrum One Contract Addresses (Kalshi)
-// Per Kalshi docs: https://docs.kalshi.com
-export const ARBITRUM_USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const; // USDC on Arbitrum
-// Kalshi Market Registry (verify from Kalshi docs)
-export const KALSHI_MARKET_REGISTRY_ADDRESS = '0x0000000000000000000000000000000000000000' as const; // TODO: Get from Kalshi docs
+// Multi-chain USDC Addresses
+export const POLYGON_USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const; // USDC on Polygon
+export const ETHEREUM_USDC_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as const; // USDC on Ethereum
+export const BASE_USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const; // USDC on Base
 
 // Kalshi API Configuration
+// Per Kalshi docs: https://docs.kalshi.com
+// Kalshi is a centralized exchange and doesn't require blockchain integration
 export const KALSHI_API_URL: string = process.env.NEXT_PUBLIC_KALSHI_API_URL || 'https://api.kalshi.com/trade-api/v2';
 export const KALSHI_API_KEY: string = process.env.KALSHI_API_KEY || '';
 export const KALSHI_API_SECRET: string = process.env.KALSHI_API_SECRET || '';
