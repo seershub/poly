@@ -12,8 +12,15 @@
  * - Transactions can be relayed by relayers on the gas station network
  */
 
-import { type Address, type WalletClient, type PublicClient, getAddress } from 'viem';
+import { type Address, type WalletClient, type PublicClient as ViemPublicClient, getAddress } from 'viem';
 import { POLYMARKET_GNOSIS_SAFE_FACTORY, POLYMARKET_PROXY_FACTORY } from '@/lib/constants';
+
+// Type definition for PublicClient that accepts both Viem and Wagmi types
+// Per Wagmi v2 docs: usePublicClient() returns a PublicClient-compatible instance
+type PublicClientType = ViemPublicClient | {
+  readContract: ViemPublicClient['readContract'];
+  getBytecode: ViemPublicClient['getBytecode'];
+};
 
 // Gnosis Safe Factory ABI (simplified - for proxy wallet lookup)
 // Per PolygonScan: Polymarket uses computeProxyAddress(user) instead of getAddress
@@ -39,7 +46,7 @@ const GNOSIS_SAFE_FACTORY_ABI = [
  */
 export async function getProxyWalletAddress(
   eoaAddress: Address,
-  publicClient: PublicClient | any // Accept both Viem PublicClient and Wagmi's usePublicClient return type
+  publicClient: PublicClientType // Accept both Viem PublicClient and Wagmi's usePublicClient return type
 ): Promise<Address | null> {
   try {
     // Per Polymarket docs: Proxy wallets are deployed via factory contracts
@@ -139,7 +146,7 @@ export async function deployProxyWallet(
  */
 export async function ensureProxyWallet(
   eoaAddress: Address,
-  publicClient: PublicClient | any, // Accept both Viem PublicClient and Wagmi's usePublicClient return type
+  publicClient: PublicClientType, // Accept both Viem PublicClient and Wagmi's usePublicClient return type
   walletClient: WalletClient,
   walletType: 'metamask' | 'magiclink' = 'metamask'
 ): Promise<Address> {
