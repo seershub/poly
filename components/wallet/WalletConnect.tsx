@@ -48,19 +48,27 @@ export function WalletConnect() {
       }
       
       // Check if setup is already completed (from localStorage)
+      // This is the primary check - if setup is marked as complete, don't redirect
       const setupCompleted = localStorage.getItem(`poly-setup-completed-${address}`);
       if (setupCompleted === 'true') {
         return; // Setup already completed, don't redirect
       }
       
-      // Check if setup is needed (proxy wallet or API credentials missing)
-      // Note: USDC approval is checked on setup page, not here
-      const needsSetup = !hasProxyWallet || !credentials;
+      // Only redirect if setup is not completed AND we're not already on setup page
+      // Give a small delay to allow state to load
+      const timer = setTimeout(() => {
+        const stillNeedsSetup = localStorage.getItem(`poly-setup-completed-${address}`) !== 'true';
+        if (stillNeedsSetup && window.location.pathname !== '/setup') {
+          console.log('Setup not completed, redirecting to setup page...', {
+            address,
+            hasProxyWallet,
+            hasCredentials: !!credentials,
+          });
+          window.location.href = '/setup';
+        }
+      }, 1000); // Wait 1 second for state to load
       
-      if (needsSetup) {
-        // Redirect to setup page
-        window.location.href = '/setup';
-      }
+      return () => clearTimeout(timer);
     }
   }, [isConnected, authenticated, address, hasProxyWallet, credentials]);
 
