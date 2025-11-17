@@ -103,8 +103,7 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
     chainId: polygon.id, // CRITICAL: Explicitly specify chain
     query: {
       enabled: !!address && open,
-      refetchInterval: 5000,
-      watch: true, // Watch for balance changes
+      refetchInterval: 5000, // Refetch every 5 seconds to watch for balance changes
     },
   });
 
@@ -120,8 +119,7 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
     chainId: polygon.id, // CRITICAL: Explicitly specify chain
     query: {
       enabled: !!proxyWalletAddress && open,
-      refetchInterval: 5000,
-      watch: true, // Watch for balance changes
+      refetchInterval: 5000, // Refetch every 5 seconds to watch for balance changes
     },
   });
 
