@@ -158,7 +158,8 @@ export async function deploySafeWalletViaRelayer(
     console.log('Deploying Safe Wallet via Polymarket Relayer...');
     
     // Per Polymarket docs: deploySafe() deploys a Safe wallet, Polymarket pays gas
-    const response = await relayerClient.deploySafe();
+    // Note: Method name may be deploy() or deploySafe() depending on version
+    const response = await relayerClient.deploySafe?.() || await relayerClient.deploy?.();
     const result = await response.wait();
 
     if (result && result.proxyAddress) {
