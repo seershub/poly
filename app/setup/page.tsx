@@ -125,6 +125,8 @@ export default function TradingWalletSetupPage() {
           try {
             const maxAmount = parseUnits('1000000', USDC_DECIMALS); // 1M USDC max
             await approveTokenViaRelayer(walletClient, POLYGON_USDC_ADDRESS, POLYMARKET_CLOB_ADDRESS, maxAmount);
+            // Note: toast is stable from hook, no need to add to deps
+            // eslint-disable-next-line react-hooks/exhaustive-deps
             toast({
               title: 'USDC Approved',
               description: 'USDC approval completed via gasless relayer',

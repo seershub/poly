@@ -238,6 +238,11 @@ export function usePlacePrediction() {
           await new Promise(resolve => setTimeout(resolve, 3000));
           
           // Refetch allowance from proxy wallet
+          // CRITICAL: proxyWalletAddress must exist at this point (checked earlier)
+          if (!proxyWalletAddress) {
+            throw new Error('Proxy wallet address not available');
+          }
+          
           const refreshedAllowance = await publicClient.readContract({
             address: POLYGON_USDC_ADDRESS,
             abi: USDC_ABI,
