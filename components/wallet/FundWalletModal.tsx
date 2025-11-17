@@ -60,7 +60,9 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
   // Wait for transaction
   const { isLoading: isWaitingTx, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
     hash: txHash as `0x${string}` | undefined,
-    enabled: !!txHash,
+    query: {
+      enabled: !!txHash,
+    },
   });
 
   // Reset on close
