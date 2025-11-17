@@ -215,13 +215,14 @@ export default function TradingWalletSetupPage() {
 
   // Auto-redirect when all steps are completed
   useEffect(() => {
-    if (allStepsCompleted) {
+    if (allStepsCompleted && steps.length > 0) {
+      console.log('All steps completed, redirecting to home...');
       const timer = setTimeout(() => {
-        router.push('/');
+        router.replace('/');
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [allStepsCompleted, router]);
+  }, [allStepsCompleted, steps.length, router]);
 
   const handleStepAction = async (step: SetupStep) => {
     if (!step.action || step.status === 'completed' || step.status === 'in-progress') {
@@ -354,14 +355,20 @@ export default function TradingWalletSetupPage() {
           ))}
         </div>
 
-        {allStepsCompleted && (
+        {allStepsCompleted && steps.length === 3 && (
           <Card className="border-green-500/50 bg-green-500/5">
             <CardContent className="pt-6">
               <div className="text-center space-y-4">
-                <CheckCircle2 className="h-12 w-12 text-green-400 mx-auto" />
+                <CheckCircle2 className="h-12 w-12 text-green-400 mx-auto animate-pulse" />
                 <div>
                   <h3 className="text-xl font-bold text-white mb-2">Setup Complete!</h3>
                   <p className="text-zinc-400">Redirecting to home page...</p>
+                  <Button
+                    onClick={() => router.replace('/')}
+                    className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white"
+                  >
+                    Go to Home
+                  </Button>
                 </div>
               </div>
             </CardContent>
