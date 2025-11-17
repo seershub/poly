@@ -7,7 +7,7 @@
 
 import { type Address, type WalletClient, type PublicClient, parseUnits, formatUnits } from 'viem';
 import { polygon } from 'viem/chains';
-import { POLYGON_USDC_ADDRESS, USDC_DECIMALS } from '@/lib/constants';
+import { POLYGON_USDC_ADDRESS, USDC_DECIMALS, POLYGON_CHAIN_ID } from '@/lib/constants';
 
 // USDC ERC20 ABI (transfer functions)
 const USDC_ABI = [
@@ -51,6 +51,22 @@ export async function depositUsdcToProxyWallet(
       throw new Error('Wallet client not available');
     }
 
+    if (!walletClient.account) {
+      throw new Error('Wallet account not available');
+    }
+
+    // CRITICAL: Check if proxy wallet address is valid
+    if (!proxyWalletAddress) {
+      throw new Error('Proxy wallet address not available. Please deploy a Safe Wallet first.');
+    }
+
+    // CRITICAL: Check if wallet is on Polygon network
+    // Note: walletClient.chain might not be available, so we rely on the caller to check
+    // But we add a safety check here as well
+    if (walletClient.chain && walletClient.chain.id !== POLYGON_CHAIN_ID) {
+      throw new Error(`Wrong network. Please switch to Polygon (Chain ID: ${POLYGON_CHAIN_ID}). Current: ${walletClient.chain.id}`);
+    }
+
     // Convert amount to USDC units (6 decimals)
     const amountInUnits = parseUnits(amount, USDC_DECIMALS);
 
@@ -59,14 +75,10 @@ export async function depositUsdcToProxyWallet(
       to: proxyWalletAddress,
       amount,
       amountInUnits: amountInUnits.toString(),
+      chainId: walletClient.chain?.id,
     });
 
     // Transfer USDC from EOA to proxy wallet
-    // Note: walletClient already has account information, but we need to pass it explicitly
-    if (!walletClient.account) {
-      throw new Error('Wallet account not available');
-    }
-    
     const hash = await walletClient.writeContract({
       chain: polygon,
       account: walletClient.account,
@@ -78,9 +90,19 @@ export async function depositUsdcToProxyWallet(
 
     console.log('USDC deposit transaction hash:', hash);
     return hash;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error depositing USDC to proxy wallet:', error);
-    throw error;
+    
+    // Provide user-friendly error messages
+    if (error.message?.includes('User rejected')) {
+      throw new Error('Transaction rejected by user');
+    } else if (error.message?.includes('insufficient funds')) {
+      throw new Error('Insufficient USDC balance');
+    } else if (error.message?.includes('network') || error.message?.includes('chain')) {
+      throw new Error(`Network error: ${error.message}`);
+    } else {
+      throw new Error(error.message || 'Failed to deposit USDC. Please try again.');
+    }
   }
 }
 

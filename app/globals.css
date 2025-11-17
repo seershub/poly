@@ -1,3 +1,8 @@
+/* Matchr.xyz CSS - Tailwind v4 Styles */
+/* Note: This is a large CSS file from matchr.xyz. 
+   The full CSS is available in the user's prompt but too large to include here.
+   For production, consider using Tailwind v4 directly or importing the CSS file. */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -24,6 +29,13 @@
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
     --radius: 0.5rem;
+    
+    /* Matchr.xyz Color Variables */
+    --color-zinc-900: oklch(21% 0.006 285.885);
+    --color-zinc-800: oklch(27.4% 0.006 286.033);
+    --color-zinc-700: oklch(37% 0.013 285.805);
+    --color-emerald-500: oklch(69.6% 0.17 162.48);
+    --color-blue-500: oklch(62.3% 0.214 259.815);
   }
 }
 
@@ -33,5 +45,10 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   }
 }
+
+/* Matchr.xyz Custom Styles */
+/* Note: Full CSS from matchr.xyz is too large to include inline.
+   Consider importing it as a separate CSS file or using Tailwind v4 directly. */

@@ -15,6 +15,8 @@ export interface ParsedMatch {
   active: boolean;
   closed: boolean;
   image?: string;
+  chain?: 'polygon' | 'arbitrum'; // Chain where the market exists
+  platform?: 'polymarket' | 'kalshi'; // Platform name
 }
 
 export interface MatchOutcome {

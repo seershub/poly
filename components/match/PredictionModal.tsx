@@ -17,8 +17,9 @@ import { SHARE_PRESETS, MIN_SHARE_SIZE, MAX_SHARE_SIZE } from '@/lib/constants';
 import type { ParsedMatch, PredictionSide } from '@/types/match';
 import { TrendingUp, TrendingDown, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { useChainId } from 'wagmi';
-import { POLYGON_CHAIN_ID } from '@/lib/constants';
+import { useChainId, useSwitchChain } from 'wagmi';
+import { POLYGON_CHAIN_ID, ARBITRUM_CHAIN_ID } from '@/lib/constants';
+import { polygon, arbitrum } from 'viem/chains';
 
 interface PredictionModalProps {
   match: ParsedMatch;
@@ -29,10 +30,15 @@ interface PredictionModalProps {
 export function PredictionModal({ match, side, onClose }: PredictionModalProps) {
   const { isConnected, address } = useAccount();
   const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
   const { predict, isPending, isApproving, error } = usePlacePrediction();
   
-  // Check if on Polygon network
-  const isPolygon = chainId === POLYGON_CHAIN_ID;
+  // CRITICAL: Determine required chain based on match platform
+  const requiredChain = match.chain === 'arbitrum' ? ARBITRUM_CHAIN_ID : POLYGON_CHAIN_ID;
+  const isOnCorrectChain = chainId === requiredChain;
+  
+  // Get chain name for display
+  const chainName = match.chain === 'arbitrum' ? 'Arbitrum' : 'Polygon';
 
   // CRITICAL: Share-based input (NOT amount-based)
   const [shares, setShares] = useState(1.0);
@@ -47,6 +53,20 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
   const potentialPayout = shares * 1.0; // Payout = shares * $1 (if they win)
   const profit = potentialPayout - cost; // Profit = payout - cost
 
+  const handleSwitchChain = async () => {
+    try {
+      const targetChain = match.chain === 'arbitrum' ? arbitrum : polygon;
+      await switchChain({ chainId: targetChain.id });
+    } catch (error: any) {
+      console.error('Error switching chain:', error);
+      toast({
+        title: 'Network Switch Failed',
+        description: error.message || `Failed to switch to ${chainName} network`,
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handlePredict = () => {
     if (!isConnected || !address) {
       toast({
@@ -57,11 +77,24 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
       return;
     }
 
-    if (!isPolygon) {
+    // CRITICAL: Check if on correct chain (Polygon for Polymarket, Arbitrum for Kalshi)
+    if (!isOnCorrectChain) {
       toast({
         title: 'Wrong Network',
-        description: `Please switch to Polygon network (Chain ID: ${POLYGON_CHAIN_ID}). Current: ${chainId}`,
+        description: `Please switch to ${chainName} network (Chain ID: ${requiredChain}). Current: ${chainId}`,
         variant: 'destructive',
+      });
+      handleSwitchChain();
+      return;
+    }
+
+    // CRITICAL: Kalshi markets not yet supported for predictions
+    // TODO: Implement Kalshi prediction logic when API is ready
+    if (match.platform === 'kalshi') {
+      toast({
+        title: 'Coming Soon',
+        description: 'Kalshi predictions will be available soon.',
+        variant: 'default',
       });
       return;
     }
@@ -127,10 +160,23 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
 
         <div className="space-y-4 py-4">
           {/* Network Warning */}
-          {!isPolygon && (
+          {!isOnCorrectChain && (
             <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg flex items-center gap-2 text-yellow-500">
               <AlertCircle className="h-4 w-4" />
-              <span className="text-sm">Please switch to Polygon network</span>
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Wrong Network</p>
+                <p className="text-xs text-yellow-400/70">
+                  Please switch to {chainName} network (Chain ID: {requiredChain})
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSwitchChain}
+                className="border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/20"
+              >
+                Switch
+              </Button>
             </div>
           )}
 

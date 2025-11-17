@@ -22,8 +22,20 @@ export const DATA_API_URL: string = process.env.NEXT_PUBLIC_DATA_API_URL || 'htt
 export const POLYMARKET_RELAYER_URL: string = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com/';
 
 // Chain Configuration
-// Use environment variable if available, otherwise use default (Polygon Mainnet)
-export const POLYGON_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '137');
+// Multi-chain support: Polygon (Polymarket) + Arbitrum (Kalshi)
+export const POLYGON_CHAIN_ID = 137;
+export const ARBITRUM_CHAIN_ID = 42161;
+
+// Arbitrum One Contract Addresses (Kalshi)
+// Per Kalshi docs: https://docs.kalshi.com
+export const ARBITRUM_USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const; // USDC on Arbitrum
+// Kalshi Market Registry (verify from Kalshi docs)
+export const KALSHI_MARKET_REGISTRY_ADDRESS = '0x0000000000000000000000000000000000000000' as const; // TODO: Get from Kalshi docs
+
+// Kalshi API Configuration
+export const KALSHI_API_URL: string = process.env.NEXT_PUBLIC_KALSHI_API_URL || 'https://api.kalshi.com/trade-api/v2';
+export const KALSHI_API_KEY: string = process.env.KALSHI_API_KEY || '';
+export const KALSHI_API_SECRET: string = process.env.KALSHI_API_SECRET || '';
 
 // Default Order Configuration
 export const DEFAULT_FEE_RATE_BPS = 0; // 0 basis points

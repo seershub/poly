@@ -3,8 +3,9 @@
 import { MatchCard } from './MatchCard';
 import { MatchFilters } from './MatchFilters';
 import type { ParsedMatch, MatchFilters as FilterType } from '@/types/match';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useFilteredMatches } from '@/hooks/usePolymarketMarkets';
+import { useKalshiMarkets } from '@/hooks/useKalshiMarkets';
 import { Loader2 } from 'lucide-react';
 
 export function MatchGrid() {
@@ -15,7 +16,23 @@ export function MatchGrid() {
     sortBy: 'volume',
   });
 
-  const { matches, isLoading, error } = useFilteredMatches(filters);
+  // Fetch markets from both platforms
+  const { matches: polymarketMatches, isLoading: isLoadingPoly, error: polyError } = useFilteredMatches(filters);
+  const { data: kalshiMatches, isLoading: isLoadingKalshi, error: kalshiError } = useKalshiMarkets();
+
+  // Combine and sort markets
+  const matches = useMemo(() => {
+    const allMatches: ParsedMatch[] = [
+      ...(polymarketMatches || []).map(m => ({ ...m, chain: 'polygon' as const, platform: 'polymarket' as const })),
+      ...(kalshiMatches || []).map(m => ({ ...m, chain: 'arbitrum' as const, platform: 'kalshi' as const })),
+    ];
+
+    // Sort by start time (earliest first)
+    return allMatches.sort((a, b) => a.matchDate.getTime() - b.matchDate.getTime());
+  }, [polymarketMatches, kalshiMatches]);
+
+  const isLoading = isLoadingPoly || isLoadingKalshi;
+  const error = polyError || kalshiError;
 
   if (isLoading) {
     return (
