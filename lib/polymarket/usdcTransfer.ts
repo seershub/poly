@@ -33,18 +33,20 @@ const USDC_ABI = [
 /**
  * Deposit USDC from EOA to proxy wallet
  * Per Polymarket docs: USDC must be in proxy wallet for trading
- * 
+ *
  * @param walletClient - Wagmi wallet client
  * @param eoaAddress - EOA address (source)
  * @param proxyWalletAddress - Proxy wallet address (destination)
  * @param amount - Amount in USDC (e.g., "100.50")
+ * @param usdcAddress - USDC token address (default: POLYGON_USDC_ADDRESS)
  * @returns Transaction hash
  */
 export async function depositUsdcToProxyWallet(
   walletClient: WalletClient,
   eoaAddress: Address,
   proxyWalletAddress: Address,
-  amount: string
+  amount: string,
+  usdcAddress: Address = POLYGON_USDC_ADDRESS
 ): Promise<string> {
   try {
     if (!walletClient) {
@@ -75,6 +77,7 @@ export async function depositUsdcToProxyWallet(
       to: proxyWalletAddress,
       amount,
       amountInUnits: amountInUnits.toString(),
+      usdcAddress,
       chainId: walletClient.chain?.id,
     });
 
@@ -82,7 +85,7 @@ export async function depositUsdcToProxyWallet(
     const hash = await walletClient.writeContract({
       chain: polygon,
       account: walletClient.account,
-      address: POLYGON_USDC_ADDRESS,
+      address: usdcAddress,
       abi: USDC_ABI,
       functionName: 'transfer',
       args: [proxyWalletAddress, amountInUnits],
