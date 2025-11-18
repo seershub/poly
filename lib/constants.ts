@@ -29,7 +29,10 @@ export const BASE_CHAIN_ID = 8453;
 // Solana is not EVM-compatible (Chain ID: N/A, requires @solana/web3.js)
 
 // Multi-chain USDC Addresses
-export const POLYGON_USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const; // USDC on Polygon
+// CRITICAL: Polygon has TWO USDC tokens - check BOTH!
+export const POLYGON_USDC_NATIVE = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as const; // USDC (Native) - NEW (2023+)
+export const POLYGON_USDC_BRIDGED = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const; // USDC.e (Bridged from Ethereum) - OLD
+export const POLYGON_USDC_ADDRESS = POLYGON_USDC_BRIDGED; // Default to bridged for Polymarket compatibility
 export const ETHEREUM_USDC_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as const; // USDC on Ethereum
 export const BASE_USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const; // USDC on Base
 
