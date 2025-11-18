@@ -5,7 +5,7 @@ import { WalletConnect } from '@/components/wallet/WalletConnect';
 import { useAccount, useBalance } from 'wagmi';
 import { Trophy, Home, LayoutDashboard, Shield } from 'lucide-react';
 import { useProxyWallet } from '@/hooks/useProxyWallet';
-import { POLYGON_USDC_ADDRESS } from '@/lib/constants';
+import { POLYGON_USDC_ADDRESS, POLYGON_USDC_NATIVE, POLYGON_USDC_BRIDGED } from '@/lib/constants';
 import { polygon } from 'viem/chains';
 import { formatCurrency } from '@/lib/utils';
 
@@ -13,16 +13,33 @@ export function Navbar() {
   const { isConnected, address } = useAccount();
   const { proxyWalletAddress, hasProxyWallet } = useProxyWallet();
 
-  // Get Safe Wallet USDC balance
-  const { data: safeWalletBalance } = useBalance({
+  // CRITICAL: Polygon has TWO USDC tokens - check BOTH!
+  // Get NATIVE USDC balance from Safe Wallet
+  const { data: safeWalletBalanceNative } = useBalance({
     address: proxyWalletAddress || undefined,
-    token: POLYGON_USDC_ADDRESS,
+    token: POLYGON_USDC_NATIVE,
     chainId: polygon.id,
     query: {
       enabled: !!proxyWalletAddress && isConnected,
       refetchInterval: 10000, // Refetch every 10 seconds
     },
   });
+
+  // Get BRIDGED USDC balance from Safe Wallet
+  const { data: safeWalletBalanceBridged } = useBalance({
+    address: proxyWalletAddress || undefined,
+    token: POLYGON_USDC_BRIDGED,
+    chainId: polygon.id,
+    query: {
+      enabled: !!proxyWalletAddress && isConnected,
+      refetchInterval: 10000, // Refetch every 10 seconds
+    },
+  });
+
+  // Calculate total Safe Wallet USDC balance (native + bridged)
+  const nativeAmount = parseFloat(safeWalletBalanceNative?.formatted || '0');
+  const bridgedAmount = parseFloat(safeWalletBalanceBridged?.formatted || '0');
+  const totalSafeWalletBalance = nativeAmount + bridgedAmount;
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-sm">
@@ -76,7 +93,7 @@ export function Navbar() {
                 <div className="flex flex-col">
                   <span className="text-xs text-emerald-400/70">Safe Wallet</span>
                   <span className="text-sm font-semibold text-emerald-400">
-                    {safeWalletBalance ? formatCurrency(parseFloat(safeWalletBalance.formatted)) : '0.00'} USDC
+                    {formatCurrency(totalSafeWalletBalance)} USDC
                   </span>
                 </div>
               </div>

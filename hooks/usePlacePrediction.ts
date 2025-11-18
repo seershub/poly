@@ -11,8 +11,8 @@ import {
   useChainId,
   usePublicClient,
 } from 'wagmi';
-import { parseUnits } from 'viem';
-import { POLYGON_USDC_ADDRESS, POLYMARKET_CLOB_ADDRESS, USDC_DECIMALS, POLYGON_CHAIN_ID } from '@/lib/constants';
+import { parseUnits, formatUnits } from 'viem';
+import { POLYGON_USDC_ADDRESS, POLYGON_USDC_NATIVE, POLYGON_USDC_BRIDGED, POLYMARKET_CLOB_ADDRESS, USDC_DECIMALS, POLYGON_CHAIN_ID } from '@/lib/constants';
 import { placePrediction, initializeClobClient } from '@/lib/polymarket/clobClient';
 import { useApiCredentials } from './useApiCredentials';
 import { useProxyWallet } from './useProxyWallet';
@@ -62,28 +62,53 @@ export function usePlacePrediction() {
   // "This proxy wallet is where all the user's positions (ERC1155) and USDC (ERC20) are held."
   // Check balance from proxy wallet address, not EOA address
   const balanceAddress = proxyWalletAddress || address; // Use proxy wallet if available, fallback to EOA
-  
-  // Get USDC balance from proxy wallet (or EOA if proxy doesn't exist yet)
-  // Per Polymarket docs: Must be on Polygon network
-  const { data: balance, refetch: refetchBalance, isLoading: isLoadingBalance } = useBalance({
+
+  // CRITICAL: Polygon has TWO USDC tokens - check BOTH!
+  // USDC (Native): 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359 - NEW (2023+)
+  // USDC.e (Bridged): 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174 - OLD
+
+  // Get NATIVE USDC balance from proxy wallet
+  const { data: balanceNative, refetch: refetchBalanceNative, isLoading: isLoadingBalanceNative } = useBalance({
     address: balanceAddress,
-    token: POLYGON_USDC_ADDRESS,
+    token: POLYGON_USDC_NATIVE,
     query: {
-      enabled: !!balanceAddress && isPolygon, // Only fetch when address is available AND on Polygon
-      refetchInterval: 5000, // Refetch every 5 seconds
+      enabled: !!balanceAddress && isPolygon,
+      refetchInterval: 5000,
     },
   });
 
+  // Get BRIDGED USDC balance from proxy wallet
+  const { data: balanceBridged, refetch: refetchBalanceBridged, isLoading: isLoadingBalanceBridged } = useBalance({
+    address: balanceAddress,
+    token: POLYGON_USDC_BRIDGED,
+    query: {
+      enabled: !!balanceAddress && isPolygon,
+      refetchInterval: 5000,
+    },
+  });
+
+  // Calculate total USDC balance (sum of both native and bridged)
+  const nativeAmount = parseFloat(balanceNative?.formatted || '0');
+  const bridgedAmount = parseFloat(balanceBridged?.formatted || '0');
+  const totalUsdcAmount = nativeAmount + bridgedAmount;
+
+  // Determine which USDC token has balance (for approval purposes)
+  const activeUsdcAddress = nativeAmount > 0 ? POLYGON_USDC_NATIVE : (bridgedAmount > 0 ? POLYGON_USDC_BRIDGED : POLYGON_USDC_ADDRESS);
+  const activeUsdcType = nativeAmount > 0 ? 'USDC (Native)' : (bridgedAmount > 0 ? 'USDC.e (Bridged)' : 'Unknown');
+
+  const isLoadingBalance = isLoadingBalanceNative || isLoadingBalanceBridged;
+
   // CRITICAL: Get USDC allowance from proxy wallet (not EOA)
   // Per Polymarket docs: USDC is in proxy wallet, so allowance must be checked from proxy wallet
+  // Check allowance for whichever USDC token has balance
   const allowanceOwner = proxyWalletAddress || address; // Use proxy wallet if available
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: POLYGON_USDC_ADDRESS,
+    address: activeUsdcAddress,
     abi: USDC_ABI,
     functionName: 'allowance',
     args: allowanceOwner && [allowanceOwner, POLYMARKET_CLOB_ADDRESS],
     query: {
-      enabled: !!allowanceOwner && isPolygon, // Only fetch when address is available AND on Polygon
+      enabled: !!allowanceOwner && isPolygon && totalUsdcAmount > 0, // Only fetch when address is available AND on Polygon AND has USDC
     },
   });
 
@@ -136,71 +161,94 @@ export function usePlacePrediction() {
         throw new Error('Proxy wallet address not available. Please refresh the page.');
       }
 
-      // CRITICAL: Force refetch balance from proxy wallet to ensure we have latest data
+      // CRITICAL: Force refetch BOTH USDC balances from proxy wallet to ensure we have latest data
       // Per Polymarket docs: Always check balance before placing order
-      console.log('Refetching USDC balance from proxy wallet...', { 
-        eoaAddress: address, 
-        proxyWalletAddress, 
-        isPolygon, 
-        chainId 
+      console.log('Refetching USDC balances (native + bridged) from proxy wallet...', {
+        eoaAddress: address,
+        proxyWalletAddress,
+        isPolygon,
+        chainId
       });
-      const { data: refreshedBalance, error: balanceError } = await refetchBalance();
-      
-      const currentBalance = refreshedBalance || balance;
 
-      console.log('Checking USDC balance from proxy wallet (per Polymarket docs):', {
+      const [{ data: refreshedBalanceNative, error: balanceErrorNative }, { data: refreshedBalanceBridged, error: balanceErrorBridged }] = await Promise.all([
+        refetchBalanceNative(),
+        refetchBalanceBridged()
+      ]);
+
+      const currentBalanceNative = refreshedBalanceNative || balanceNative;
+      const currentBalanceBridged = refreshedBalanceBridged || balanceBridged;
+
+      // Calculate total balance from both USDC tokens
+      const nativeValue = currentBalanceNative ? BigInt(currentBalanceNative.value) : BigInt(0);
+      const bridgedValue = currentBalanceBridged ? BigInt(currentBalanceBridged.value) : BigInt(0);
+      const totalBalanceValue = nativeValue + bridgedValue;
+
+      const nativeFormatted = currentBalanceNative?.formatted || '0';
+      const bridgedFormatted = currentBalanceBridged?.formatted || '0';
+      const totalFormatted = formatUnits(totalBalanceValue, USDC_DECIMALS);
+
+      console.log('Checking USDC balance from proxy wallet (DUAL USDC - per Polymarket docs):', {
         cost,
         requiredUsdc: requiredUsdc.toString(),
-        balance: currentBalance ? currentBalance.value.toString() : 'null',
-        formatted: currentBalance?.formatted,
-        symbol: currentBalance?.symbol,
+        nativeBalance: nativeValue.toString(),
+        nativeFormatted,
+        bridgedBalance: bridgedValue.toString(),
+        bridgedFormatted,
+        totalBalance: totalBalanceValue.toString(),
+        totalFormatted,
         proxyWalletAddress,
         eoaAddress: address,
         chainId,
         isPolygon,
-        balanceError: balanceError?.message,
+        activeUsdcType,
+        balanceErrorNative: balanceErrorNative?.message,
+        balanceErrorBridged: balanceErrorBridged?.message,
       });
 
       // Check USDC balance - per Polymarket requirements
-      if (!currentBalance) {
-        if (balanceError) {
-          throw new Error(`Failed to fetch USDC balance from proxy wallet: ${balanceError.message}. Please ensure you are connected to Polygon network and have USDC in your proxy wallet (${proxyWalletAddress}).`);
+      if (totalBalanceValue === BigInt(0)) {
+        if (balanceErrorNative || balanceErrorBridged) {
+          throw new Error(`Failed to fetch USDC balance from proxy wallet: ${balanceErrorNative?.message || balanceErrorBridged?.message}. Please ensure you are connected to Polygon network and have USDC in your proxy wallet (${proxyWalletAddress}).`);
         }
-        throw new Error(`USDC balance not loaded from proxy wallet (${proxyWalletAddress}). Please ensure you are connected to Polygon network (Chain ID: 137) and have USDC in your proxy wallet. Note: USDC must be in your proxy wallet, not your EOA address.`);
+        throw new Error(`No USDC found in proxy wallet (${proxyWalletAddress}). Please ensure you are connected to Polygon network (Chain ID: 137) and have USDC in your proxy wallet. Note: USDC must be in your proxy wallet, not your EOA address.`);
       }
 
-      const balanceValue = BigInt(currentBalance.value);
-
-      if (balanceValue < requiredUsdc) {
-        const formattedBalance = Number(balanceValue) / 10 ** USDC_DECIMALS;
+      if (totalBalanceValue < requiredUsdc) {
+        const formattedBalance = Number(totalBalanceValue) / 10 ** USDC_DECIMALS;
         throw new Error(
-          `Insufficient USDC balance. You have ${formattedBalance.toFixed(2)} USDC but need ${cost.toFixed(2)} USDC`
+          `Insufficient USDC balance. You have ${formattedBalance.toFixed(2)} USDC (Native: ${nativeFormatted}, Bridged: ${bridgedFormatted}) but need ${cost.toFixed(2)} USDC`
         );
       }
 
-      console.log('✅ USDC balance check passed');
+      console.log('✅ USDC balance check passed (Total:', totalFormatted, 'USDC)');
 
       // CRITICAL: Per Polymarket docs - Check allowance from the wallet that holds USDC
       // If proxy wallet exists, check from proxy wallet. Otherwise check from EOA.
       if (!publicClient) {
         throw new Error('Public client not available');
       }
-      
+
       // Use proxy wallet if available, otherwise use EOA (for first-time users)
       const allowanceOwner = proxyWalletAddress || address;
       if (!allowanceOwner) {
         throw new Error('No wallet address available for allowance check');
       }
 
+      // Determine which USDC token to use for approval (prioritize whichever has balance)
+      const usdcToUse = nativeValue > BigInt(0) ? POLYGON_USDC_NATIVE : (bridgedValue > BigInt(0) ? POLYGON_USDC_BRIDGED : POLYGON_USDC_ADDRESS);
+      const usdcTypeToUse = nativeValue > BigInt(0) ? 'USDC (Native)' : (bridgedValue > BigInt(0) ? 'USDC.e (Bridged)' : 'Unknown');
+
       console.log('Checking USDC allowance:', {
         allowanceOwner,
         isProxyWallet: !!proxyWalletAddress,
         proxyWalletAddress,
         eoaAddress: address,
+        usdcToUse,
+        usdcTypeToUse,
       });
 
       const proxyAllowanceResult = await publicClient.readContract({
-        address: POLYGON_USDC_ADDRESS,
+        address: usdcToUse,
         abi: USDC_ABI,
         functionName: 'allowance',
         args: [allowanceOwner, POLYMARKET_CLOB_ADDRESS],
@@ -211,6 +259,8 @@ export function usePlacePrediction() {
 
       console.log('USDC allowance check result:', {
         allowanceOwner,
+        usdcToUse,
+        usdcTypeToUse,
         currentAllowance: currentAllowance.toString(),
         requiredUsdc: requiredUsdc.toString(),
         needsApproval: currentAllowance < requiredUsdc,
@@ -220,43 +270,46 @@ export function usePlacePrediction() {
         // Need to approve first
         // Per Polymarket docs: Use Relayer Client for gasless token approvals
         // CRITICAL: Approval must be done FROM proxy wallet, not EOA
-        console.log('⚠️ Insufficient allowance from proxy wallet, requesting approval via Relayer (gasless)...');
-        
+        console.log('⚠️ Insufficient allowance from proxy wallet, requesting approval via Relayer (gasless)...', {
+          usdcToUse,
+          usdcTypeToUse,
+        });
+
         try {
           // Try to approve via Relayer (gasless) if builder credentials are configured
           // The relayer will execute the approval transaction FROM the proxy wallet
           const { approveTokenViaRelayer } = await import('@/lib/polymarket/relayerClient');
           const approvalTxHash = await approveTokenViaRelayer(
             walletClient,
-            POLYGON_USDC_ADDRESS,
+            usdcToUse,  // Use the correct USDC token (native or bridged)
             POLYMARKET_CLOB_ADDRESS,
             requiredUsdc
           );
-          console.log('✅ Token approval completed via Relayer (gasless):', approvalTxHash);
-          
+          console.log('✅ Token approval completed via Relayer (gasless):', approvalTxHash, '| USDC Type:', usdcTypeToUse);
+
           // Wait a bit for the transaction to be processed
           await new Promise(resolve => setTimeout(resolve, 3000));
-          
+
           // Refetch allowance from proxy wallet
           // CRITICAL: proxyWalletAddress must exist at this point (checked earlier)
           if (!proxyWalletAddress) {
             throw new Error('Proxy wallet address not available');
           }
-          
+
           const refreshedAllowance = await publicClient.readContract({
-            address: POLYGON_USDC_ADDRESS,
+            address: usdcToUse,  // Use the correct USDC token (native or bridged)
             abi: USDC_ABI,
             functionName: 'allowance',
             args: [proxyWalletAddress, POLYMARKET_CLOB_ADDRESS],
           });
-          
+
           // readContract already returns bigint, no need to convert
           if ((refreshedAllowance as bigint) < requiredUsdc) {
             throw new Error('Allowance still insufficient after approval. Please try again.');
           }
         } catch (relayerError) {
           console.warn('Relayer approval failed:', relayerError);
-          throw new Error(`Failed to approve USDC from proxy wallet. Please ensure builder credentials are configured for gasless approvals, or manually approve USDC spending from your proxy wallet (${proxyWalletAddress}) to the CLOB contract.`);
+          throw new Error(`Failed to approve ${usdcTypeToUse} from proxy wallet. Please ensure builder credentials are configured for gasless approvals, or manually approve USDC spending from your proxy wallet (${proxyWalletAddress}) to the CLOB contract.`);
         }
       }
 
