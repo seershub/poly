@@ -268,48 +268,83 @@ export function usePlacePrediction() {
 
       if (currentAllowance < requiredUsdc) {
         // Need to approve first
-        // Per Polymarket docs: Use Relayer Client for gasless token approvals
-        // CRITICAL: Approval must be done FROM proxy wallet, not EOA
-        console.log('⚠️ Insufficient allowance from proxy wallet, requesting approval via Relayer (gasless)...', {
+        // TWO OPTIONS:
+        // 1. Gasless approval via Relayer (requires Builder Signing Server) - RECOMMENDED
+        // 2. Manual approval via user's wallet (requires gas payment) - FALLBACK
+
+        console.log('⚠️ Insufficient USDC allowance. Need approval before placing order.', {
+          currentAllowance: currentAllowance.toString(),
+          requiredUsdc: requiredUsdc.toString(),
           usdcToUse,
           usdcTypeToUse,
         });
 
-        try {
-          // Try to approve via Relayer (gasless) if builder credentials are configured
-          // The relayer will execute the approval transaction FROM the proxy wallet
-          const { approveTokenViaRelayer } = await import('@/lib/polymarket/relayerClient');
-          const approvalTxHash = await approveTokenViaRelayer(
-            walletClient,
-            usdcToUse,  // Use the correct USDC token (native or bridged)
-            POLYMARKET_CLOB_ADDRESS,
-            requiredUsdc
+        // OPTION 1: Try gasless approval via Relayer first (if Builder Signing Server configured)
+        const signingServerUrl = typeof window !== 'undefined'
+          ? (window as any).ENV?.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL
+          : process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
+
+        if (signingServerUrl) {
+          console.log('🚀 Attempting gasless approval via Builder Signing Server:', signingServerUrl);
+          try {
+            // Try to approve via Relayer (gasless) if builder credentials are configured
+            // The relayer will execute the approval transaction FROM the proxy wallet
+            const { approveTokenViaRelayer } = await import('@/lib/polymarket/relayerClient');
+            const approvalTxHash = await approveTokenViaRelayer(
+              walletClient,
+              usdcToUse,  // Use the correct USDC token (native or bridged)
+              POLYMARKET_CLOB_ADDRESS,
+              BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935') // MaxUint256
+            );
+            console.log('✅ Gasless approval completed via Relayer:', approvalTxHash, '| USDC Type:', usdcTypeToUse);
+
+            // Wait for transaction to be processed
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            // Refetch allowance from proxy wallet
+            if (!proxyWalletAddress) {
+              throw new Error('Proxy wallet address not available');
+            }
+
+            const refreshedAllowance = await publicClient.readContract({
+              address: usdcToUse,
+              abi: USDC_ABI,
+              functionName: 'allowance',
+              args: [proxyWalletAddress, POLYMARKET_CLOB_ADDRESS],
+            });
+
+            if ((refreshedAllowance as bigint) < requiredUsdc) {
+              throw new Error('Allowance still insufficient after approval. Please try again.');
+            }
+
+            console.log('✅ USDC approval verified');
+            // Continue with order placement below
+          } catch (relayerError: any) {
+            console.warn('⚠️ Gasless approval via Relayer failed:', relayerError.message);
+            console.warn('Will attempt manual approval as fallback...');
+
+            // Fall through to OPTION 2 (manual approval)
+            throw new Error(
+              `Gasless approval failed. To enable gasless approvals:\n` +
+              `1. Set up Builder Signing Server (see BUILDER_SIGNING_SERVER_SETUP.md)\n` +
+              `2. Add NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL to .env.local\n\n` +
+              `Current error: ${relayerError.message}`
+            );
+          }
+        } else {
+          // OPTION 2: Manual approval (requires gas payment)
+          console.warn('⚠️ Builder Signing Server not configured. Manual approval required.');
+          console.warn('User will need to approve USDC spending and pay gas fees.');
+          console.warn('To enable gasless approvals, set up Builder Signing Server (see BUILDER_SIGNING_SERVER_SETUP.md)');
+
+          throw new Error(
+            `USDC approval required. Builder Signing Server not configured for gasless approvals.\n\n` +
+            `To enable gasless (free) approvals:\n` +
+            `1. Follow the guide in BUILDER_SIGNING_SERVER_SETUP.md\n` +
+            `2. Start the builder signing server (5 minutes)\n` +
+            `3. Add NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL to .env.local\n\n` +
+            `Without Builder Signing Server, you would need to manually approve USDC from your proxy wallet, which requires gas payment.`
           );
-          console.log('✅ Token approval completed via Relayer (gasless):', approvalTxHash, '| USDC Type:', usdcTypeToUse);
-
-          // Wait a bit for the transaction to be processed
-          await new Promise(resolve => setTimeout(resolve, 3000));
-
-          // Refetch allowance from proxy wallet
-          // CRITICAL: proxyWalletAddress must exist at this point (checked earlier)
-          if (!proxyWalletAddress) {
-            throw new Error('Proxy wallet address not available');
-          }
-
-          const refreshedAllowance = await publicClient.readContract({
-            address: usdcToUse,  // Use the correct USDC token (native or bridged)
-            abi: USDC_ABI,
-            functionName: 'allowance',
-            args: [proxyWalletAddress, POLYMARKET_CLOB_ADDRESS],
-          });
-
-          // readContract already returns bigint, no need to convert
-          if ((refreshedAllowance as bigint) < requiredUsdc) {
-            throw new Error('Allowance still insufficient after approval. Please try again.');
-          }
-        } catch (relayerError) {
-          console.warn('Relayer approval failed:', relayerError);
-          throw new Error(`Failed to approve ${usdcTypeToUse} from proxy wallet. Please ensure builder credentials are configured for gasless approvals, or manually approve USDC spending from your proxy wallet (${proxyWalletAddress}) to the CLOB contract.`);
         }
       }
 
