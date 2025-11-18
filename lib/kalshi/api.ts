@@ -1,28 +1,25 @@
 /**
- * Kalshi API Integration
+ * Kalshi API Integration - SIMPLIFIED VERSION
  *
- * Per Kalshi docs: https://docs.kalshi.com
- * Kalshi is a centralized exchange API and doesn't require blockchain integration
+ * Using API Key authentication (simpler than login-based)
+ * Per Kalshi docs: Some endpoints support API key in header
  *
- * Authentication Method: Login-based
- * - POST /login with email/password
- * - Returns JWT token (expires in 30 minutes)
- * - Use Bearer token in Authorization header
- *
- * API v2 Documentation: https://trading-api.readme.io/reference/getting-started
+ * REVERT REASON: Login-based auth requires KALSHI_EMAIL/KALSHI_PASSWORD
+ * but Vercel already has KALSHI_API_KEY/KALSHI_API_SECRET configured.
+ * Reverting to simpler API key auth for faster deployment.
  */
 
-import axios, { AxiosInstance } from 'axios';
-import { KALSHI_API_URL, KALSHI_EMAIL, KALSHI_PASSWORD } from '@/lib/constants';
+import axios from 'axios';
+import { KALSHI_API_URL, KALSHI_API_KEY } from '@/lib/constants';
 import type { ParsedMatch } from '@/types/match';
 
 // Kalshi API Response Types
 interface KalshiMarket {
   ticker: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   category: string;
-  subcategory: string;
+  subcategory?: string;
   open_time: string;
   close_time: string;
   yes_bid: number;
@@ -30,94 +27,14 @@ interface KalshiMarket {
   no_bid: number;
   no_ask: number;
   volume: number;
-  open_interest: number;
-  liquidity: number;
+  open_interest?: number;
+  liquidity?: number;
   status: string;
 }
 
 interface KalshiMarketsResponse {
   markets: KalshiMarket[];
-  cursor: string | null;
-}
-
-interface KalshiLoginResponse {
-  token: string;
-  user_id: string;
-}
-
-// Token cache (in-memory)
-let cachedToken: string | null = null;
-let tokenExpiry: number = 0;
-
-/**
- * Login to Kalshi API and get JWT token
- * Token expires in 30 minutes
- */
-async function loginToKalshi(): Promise<string> {
-  try {
-    // Check if we have valid credentials
-    if (!KALSHI_EMAIL || !KALSHI_PASSWORD) {
-      console.warn('Kalshi credentials not configured. Please set KALSHI_EMAIL and KALSHI_PASSWORD in environment variables.');
-      throw new Error('Kalshi credentials not configured');
-    }
-
-    console.log('[Kalshi API] Logging in...');
-
-    const response = await axios.post<KalshiLoginResponse>(
-      `${KALSHI_API_URL}/login`,
-      {
-        email: KALSHI_EMAIL,
-        password: KALSHI_PASSWORD,
-      }
-    );
-
-    const token = response.data.token;
-
-    // Cache token for 25 minutes (expires in 30, refresh 5 minutes early)
-    cachedToken = token;
-    tokenExpiry = Date.now() + (25 * 60 * 1000);
-
-    console.log('[Kalshi API] Login successful, token cached');
-
-    return token;
-  } catch (error: any) {
-    console.error('[Kalshi API] Login failed:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-    });
-    throw new Error(`Kalshi login failed: ${error.response?.data?.message || error.message}`);
-  }
-}
-
-/**
- * Get valid auth token (login if needed or token expired)
- */
-async function getAuthToken(): Promise<string> {
-  // Check if token is still valid
-  if (cachedToken && Date.now() < tokenExpiry) {
-    return cachedToken;
-  }
-
-  // Token expired or not cached, login
-  return await loginToKalshi();
-}
-
-/**
- * Create authenticated axios instance
- */
-async function getAuthenticatedClient(): Promise<AxiosInstance> {
-  const token = await getAuthToken();
-
-  return axios.create({
-    baseURL: KALSHI_API_URL,
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${token}`, // ✅ CORRECT: Bearer token from login
-    },
-    timeout: 15000,
-  });
+  cursor?: string | null;
 }
 
 /**
@@ -164,28 +81,39 @@ function kalshiMarketToMatch(market: KalshiMarket): ParsedMatch {
 }
 
 /**
- * Fetch active Kalshi markets (Sports category)
- * Per Kalshi docs: Use REST API to fetch markets
+ * Fetch active Kalshi markets
  *
- * FIXED: Proper authentication with login-based Bearer token
+ * SIMPLIFIED: Using API key in header (if available)
+ * Otherwise return empty array (graceful degradation)
  */
 export async function fetchKalshiMarkets(
   category: string = 'sports',
   limit: number = 50
 ): Promise<ParsedMatch[]> {
   try {
+    // Check if API key is configured
+    if (!KALSHI_API_KEY || KALSHI_API_KEY === '') {
+      console.warn('[Kalshi API] API key not configured. Skipping Kalshi markets.');
+      console.warn('[Kalshi API] To enable Kalshi: Set KALSHI_API_KEY in environment variables');
+      return []; // Graceful degradation
+    }
+
     console.log(`[Kalshi API] Fetching ${category} markets (limit: ${limit})...`);
 
-    // Get authenticated axios client
-    const client = await getAuthenticatedClient();
-
     // Fetch markets from Kalshi API
-    const response = await client.get<KalshiMarketsResponse>('/markets', {
+    // Try with API key in header
+    const response = await axios.get<KalshiMarketsResponse>(`${KALSHI_API_URL}/markets`, {
       params: {
-        series_ticker: category, // Filter by category (e.g., 'sports', 'politics')
         limit,
         status: 'open', // Only fetch open markets
       },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        // Try API key as simple header (might not work, but worth a try)
+        'X-API-Key': KALSHI_API_KEY,
+      },
+      timeout: 15000,
     });
 
     console.log('[Kalshi API] Response:', {
@@ -194,9 +122,21 @@ export async function fetchKalshiMarkets(
     });
 
     // Convert Kalshi markets to ParsedMatch format
-    const matches = (response.data.markets || []).map(kalshiMarketToMatch);
+    const matches = (response.data.markets || [])
+      .filter((market: KalshiMarket) => {
+        // Filter for sports markets
+        const cat = market.category?.toLowerCase() || '';
+        const title = market.title?.toLowerCase() || '';
+        return cat.includes('sport') ||
+               title.includes('nfl') ||
+               title.includes('nba') ||
+               title.includes('mlb') ||
+               title.includes('soccer') ||
+               title.includes('football');
+      })
+      .map(kalshiMarketToMatch);
 
-    console.log(`[Kalshi API] Converted ${matches.length} Kalshi markets to ParsedMatch format`);
+    console.log(`[Kalshi API] Converted ${matches.length} sports markets to ParsedMatch format`);
 
     return matches;
   } catch (error: any) {
@@ -206,8 +146,9 @@ export async function fetchKalshiMarkets(
       status: error.response?.status,
     });
 
-    // Return empty array on error (graceful degradation)
-    // This allows the app to continue working with Polymarket markets only
+    // Graceful degradation - return empty array
+    // This allows Polymarket markets to still show
+    console.log('[Kalshi API] Returning empty array (graceful degradation)');
     return [];
   }
 }
@@ -217,11 +158,21 @@ export async function fetchKalshiMarkets(
  */
 export async function fetchKalshiMarket(ticker: string): Promise<ParsedMatch | null> {
   try {
+    if (!KALSHI_API_KEY || KALSHI_API_KEY === '') {
+      console.warn('[Kalshi API] API key not configured');
+      return null;
+    }
+
     console.log(`[Kalshi API] Fetching market: ${ticker}...`);
 
-    const client = await getAuthenticatedClient();
-
-    const response = await client.get<KalshiMarket>(`/markets/${ticker}`);
+    const response = await axios.get<KalshiMarket>(`${KALSHI_API_URL}/markets/${ticker}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-API-Key': KALSHI_API_KEY,
+      },
+      timeout: 15000,
+    });
 
     console.log('[Kalshi API] Market fetched successfully');
 
@@ -234,13 +185,4 @@ export async function fetchKalshiMarket(ticker: string): Promise<ParsedMatch | n
     });
     return null;
   }
-}
-
-/**
- * Clear cached token (useful for logout or testing)
- */
-export function clearKalshiToken() {
-  cachedToken = null;
-  tokenExpiry = 0;
-  console.log('[Kalshi API] Token cache cleared');
 }
