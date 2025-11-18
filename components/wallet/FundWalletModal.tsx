@@ -155,11 +155,11 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
 
   // CRITICAL FIX: Get proxy wallet USDC balance
   // Always fetch from Polygon (where USDC is held)
-  const { 
-    data: proxyBalance, 
-    refetch: refetchProxyBalance, 
+  const {
+    data: proxyBalance,
+    refetch: refetchProxyBalance,
     isLoading: isLoadingProxyBalance,
-    error: proxyBalanceError 
+    error: proxyBalanceError
   } = useBalance({
     address: proxyWalletAddress || undefined,
     token: POLYGON_USDC_ADDRESS,
@@ -172,21 +172,40 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
     },
   });
 
-  // Debug logging
+  // CRITICAL: Calculate display balances (prioritize manual fallback if useBalance failed)
+  const displayEoaBalance = manualEoaBalance || eoaBalance?.formatted || '0.00';
+  const displayProxyBalance = proxyBalance?.formatted || '0.00';
+
+  // Enhanced debug logging with more details
   useEffect(() => {
     if (open && address) {
-      console.log('useBalance Debug:', {
-        address,
+      console.log('=== FundWalletModal Debug Info ===');
+      console.log('Network:', {
         chainId,
         isPolygon,
-        eoaBalance: eoaBalance?.formatted,
-        eoaBalanceError,
-        proxyWalletAddress,
-        proxyBalance: proxyBalance?.formatted,
-        proxyBalanceError,
+        expectedChainId: POLYGON_CHAIN_ID,
       });
+      console.log('Addresses:', {
+        eoaAddress: address,
+        proxyWalletAddress: proxyWalletAddress || 'NOT DEPLOYED',
+        hasProxyWallet,
+      });
+      console.log('EOA Balance (Your Wallet):', {
+        balance: eoaBalance?.formatted || 'N/A',
+        isLoading: isLoadingEoaBalance,
+        error: eoaBalanceError?.message || null,
+        manualFallback: manualBalanceFormatted || 'N/A',
+        displayBalance: displayEoaBalance,
+      });
+      console.log('Proxy Balance (Trading Wallet):', {
+        balance: proxyBalance?.formatted || 'N/A',
+        isLoading: isLoadingProxyBalance,
+        error: proxyBalanceError?.message || null,
+        displayBalance: displayProxyBalance,
+      });
+      console.log('==================================');
     }
-  }, [open, address, chainId, isPolygon, eoaBalance, eoaBalanceError, proxyWalletAddress, proxyBalance, proxyBalanceError]);
+  }, [open, address, chainId, isPolygon, eoaBalance, eoaBalanceError, proxyWalletAddress, proxyBalance, proxyBalanceError, hasProxyWallet, isLoadingEoaBalance, isLoadingProxyBalance, manualBalanceFormatted, displayEoaBalance, displayProxyBalance]);
 
   // Wait for transaction
   const { isLoading: isWaitingTx, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
@@ -228,22 +247,6 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
     }
   }, [isTxSuccess, txHash, action, toast, refetchEoaBalance, refetchProxyBalance]);
 
-  // Debug logging
-  useEffect(() => {
-    if (open && address) {
-      console.log('FundWalletModal Debug:', {
-        address,
-        chainId,
-        isPolygon,
-        eoaBalance: eoaBalance?.formatted,
-        eoaBalanceError,
-        proxyWalletAddress,
-        proxyBalance: proxyBalance?.formatted,
-        proxyBalanceError,
-      });
-    }
-  }, [open, address, chainId, isPolygon, eoaBalance, eoaBalanceError, proxyWalletAddress, proxyBalance, proxyBalanceError]);
-
   const handleSwitchToPolygon = async () => {
     try {
       await switchChain({ chainId: polygon.id });
@@ -262,10 +265,19 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
   };
 
   const handleDeposit = async () => {
+    console.log('=== Attempting USDC Deposit ===');
+
     if (!address || !proxyWalletAddress || !walletClient || !amount) {
+      const missingFields = [];
+      if (!address) missingFields.push('wallet address');
+      if (!proxyWalletAddress) missingFields.push('proxy wallet');
+      if (!walletClient) missingFields.push('wallet client');
+      if (!amount) missingFields.push('amount');
+
+      console.error('❌ Deposit failed - Missing:', missingFields.join(', '));
       toast({
         title: 'Error',
-        description: 'Please enter an amount and ensure wallet is connected',
+        description: `Missing: ${missingFields.join(', ')}. ${!proxyWalletAddress ? 'Please deploy your Safe Wallet first from the /setup page.' : 'Please ensure wallet is connected and enter an amount.'}`,
         variant: 'destructive',
       });
       return;
@@ -273,6 +285,7 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
 
     // CRITICAL: Check if on Polygon network
     if (!isPolygon) {
+      console.error(`❌ Wrong network - Current: ${chainId}, Expected: ${POLYGON_CHAIN_ID}`);
       toast({
         title: 'Wrong Network',
         description: `Please switch to Polygon network (Chain ID: ${POLYGON_CHAIN_ID}). Current: ${chainId}`,
@@ -284,6 +297,7 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
 
     const amountNum = parseFloat(amount);
     if (isNaN(amountNum) || amountNum <= 0) {
+      console.error('❌ Invalid amount:', amount);
       toast({
         title: 'Invalid Amount',
         description: 'Please enter a valid amount',
@@ -295,8 +309,15 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
     // CRITICAL: Check balance - use manual fallback if available, otherwise useBalance
     const eoaBalanceValue = manualEoaBalance || eoaBalance?.formatted || '0';
     const eoaBalanceNum = parseFloat(eoaBalanceValue);
-    
+
+    console.log('Balance check:', {
+      requested: amount,
+      available: eoaBalanceValue,
+      source: manualEoaBalance ? 'manual fallback' : 'useBalance hook',
+    });
+
     if (amountNum > eoaBalanceNum) {
+      console.error('❌ Insufficient balance:', { requested: amountNum, available: eoaBalanceNum });
       toast({
         title: 'Insufficient Balance',
         description: `You have ${eoaBalanceValue} USDC but trying to deposit ${amount}`,
@@ -307,18 +328,31 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
 
     try {
       setIsProcessing(true);
+      console.log('✅ All checks passed, initiating transfer...', {
+        from: address,
+        to: proxyWalletAddress,
+        amount: amount,
+        chainId,
+      });
+
       const hash = await depositUsdcToProxyWallet(
         walletClient,
         address,
         proxyWalletAddress,
         amount
       );
+
+      console.log('✅ Deposit transaction submitted:', hash);
       setTxHash(hash);
+      toast({
+        title: 'Transaction Submitted',
+        description: 'Please wait for confirmation...',
+      });
     } catch (error: any) {
-      console.error('Error depositing USDC:', error);
+      console.error('❌ Deposit error:', error);
       toast({
         title: 'Deposit Failed',
-        description: error.message || 'Failed to deposit USDC',
+        description: error.message || 'Failed to deposit USDC. Check console for details.',
         variant: 'destructive',
       });
       setIsProcessing(false);
@@ -342,10 +376,6 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
     const calculatedAmount = (balance * percentage / 100).toFixed(2);
     setAmount(calculatedAmount);
   };
-
-  // CRITICAL: Get display balance - prioritize manual fallback if useBalance failed/returned 0
-  const displayEoaBalance = manualEoaBalance || eoaBalance?.formatted || '0.00';
-  const displayProxyBalance = proxyBalance?.formatted || '0.00';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -588,7 +618,7 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
             {/* Transfer Button */}
             <Button
               onClick={handleDeposit}
-              disabled={!amount || isProcessing || isWaitingTx || !hasProxyWallet || !isPolygon || isLoadingEoaBalance}
+              disabled={!amount || isProcessing || isWaitingTx || !hasProxyWallet || !isPolygon}
               className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isProcessing || isWaitingTx ? (
@@ -596,26 +626,46 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   {isWaitingTx ? 'Processing...' : 'Confirming...'}
                 </>
+              ) : isLoadingEoaBalance || isLoadingManualBalance ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Loading Balance...
+                </>
               ) : (
                 <>Transfer to Trading Wallet</>
               )}
             </Button>
 
-            {/* Error Messages */}
+            {/* Status Messages */}
             {!hasProxyWallet && (
-              <p className="text-xs text-yellow-500 text-center">
-                Please deploy your proxy wallet first in the setup page
-              </p>
+              <div className="flex items-center gap-2 justify-center text-xs text-yellow-500">
+                <AlertCircle className="h-3 w-3" />
+                <span>Please deploy your proxy wallet first at /setup</span>
+              </div>
             )}
             {!isPolygon && (
-              <p className="text-xs text-yellow-500 text-center">
-                Please switch to Polygon network to deposit USDC
-              </p>
+              <div className="flex items-center gap-2 justify-center text-xs text-yellow-500">
+                <AlertCircle className="h-3 w-3" />
+                <span>Please switch to Polygon network to deposit USDC</span>
+              </div>
             )}
-            {eoaBalanceError && (
-              <p className="text-xs text-red-400 text-center">
-                Error loading balance. Using manual check: {displayEoaBalance} USDC
-              </p>
+            {eoaBalanceError && manualEoaBalance && (
+              <div className="flex items-center gap-2 justify-center text-xs text-blue-400">
+                <AlertCircle className="h-3 w-3" />
+                <span>Using fallback balance check: {displayEoaBalance} USDC</span>
+              </div>
+            )}
+            {eoaBalanceError && !manualEoaBalance && (
+              <div className="flex items-center gap-2 justify-center text-xs text-red-400">
+                <AlertCircle className="h-3 w-3" />
+                <span>Failed to load balance. Please refresh or check your connection.</span>
+              </div>
+            )}
+            {(isLoadingEoaBalance || isLoadingManualBalance) && (
+              <div className="flex items-center gap-2 justify-center text-xs text-zinc-400">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Loading balance from Polygon network...</span>
+              </div>
             )}
           </div>
         ) : (
