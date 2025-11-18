@@ -97,12 +97,22 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
     ];
 
     // Filter for sports markets with improved matching
+    // Log first 5 markets to see what we're working with
+    console.log('[DEBUG] Sample of first 5 markets:', markets.slice(0, 5).map((m: any) => ({
+      question: m.question,
+      outcomes: m.outcomes?.length || 0,
+      active: m.active,
+      closed: m.closed,
+      tags: m.tags,
+      volume: m.volume || m.volumeNum,
+    })));
+
     let sportsMarkets = markets.filter((market: any) => {
       if (!market) return false;
 
       const question = (market.question || '').toLowerCase();
       const description = (market.description || '').toLowerCase();
-      const tags = Array.isArray(market.tags) ? market.tags.map((t: any) => 
+      const tags = Array.isArray(market.tags) ? market.tags.map((t: any) =>
         typeof t === 'string' ? t.toLowerCase() : (t.name || t).toLowerCase()
       ) : [];
 
@@ -114,16 +124,30 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
                tags.some((tag: string) => tag.includes(lowerKeyword));
       });
 
-      // Additional check: if market has exactly 2 outcomes, it might be a match
-      const hasTwoOutcomes = market.outcomes && Array.isArray(market.outcomes) && market.outcomes.length === 2;
+      // Additional check: if market has 2 or 3 outcomes (2-way or 3-way bets)
+      // RELAXED: Allow 2 or 3 outcomes (was only 2)
+      const hasValidOutcomes = market.outcomes && Array.isArray(market.outcomes) &&
+                               (market.outcomes.length === 2 || market.outcomes.length === 3);
 
       // Additional check: if market is active and not closed
       const isActive = market.active && !market.closed;
 
-      return matchesKeyword && hasTwoOutcomes && isActive;
+      return matchesKeyword && hasValidOutcomes && isActive;
     });
 
-    console.log(`Found ${sportsMarkets.length} sports markets out of ${markets.length} total markets`);
+    console.log(`[FILTER] Found ${sportsMarkets.length} sports markets out of ${markets.length} total markets`);
+
+    // Log why markets were filtered out (sample)
+    const rejected = markets.slice(0, 10).filter((m: any) => !sportsMarkets.includes(m));
+    if (rejected.length > 0) {
+      console.log('[DEBUG] Sample rejected markets (first 10):', rejected.map((m: any) => ({
+        question: m.question,
+        reason: !m.active ? 'not active' :
+                m.closed ? 'closed' :
+                !m.outcomes || m.outcomes.length < 2 ? 'invalid outcomes' :
+                'no keyword match',
+      })));
+    }
 
     // Filter for major matches (reduced thresholds to show more matches)
     // Per Polymarket docs: Show markets with reasonable activity

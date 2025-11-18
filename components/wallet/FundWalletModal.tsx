@@ -176,34 +176,44 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
   const displayEoaBalance = manualEoaBalance || eoaBalance?.formatted || '0.00';
   const displayProxyBalance = proxyBalance?.formatted || '0.00';
 
-  // Enhanced debug logging with more details
+  // Enhanced debug logging with more details - FLAT FORMAT for easy reading
   useEffect(() => {
     if (open && address) {
       console.log('=== FundWalletModal Debug Info ===');
-      console.log('Network:', {
-        chainId,
-        isPolygon,
-        expectedChainId: POLYGON_CHAIN_ID,
-      });
-      console.log('Addresses:', {
-        eoaAddress: address,
-        proxyWalletAddress: proxyWalletAddress || 'NOT DEPLOYED',
-        hasProxyWallet,
-      });
-      console.log('EOA Balance (Your Wallet):', {
-        balance: eoaBalance?.formatted || 'N/A',
-        isLoading: isLoadingEoaBalance,
-        error: eoaBalanceError?.message || null,
-        manualFallback: manualBalanceFormatted || 'N/A',
-        displayBalance: displayEoaBalance,
-      });
-      console.log('Proxy Balance (Trading Wallet):', {
-        balance: proxyBalance?.formatted || 'N/A',
-        isLoading: isLoadingProxyBalance,
-        error: proxyBalanceError?.message || null,
-        displayBalance: displayProxyBalance,
-      });
+      console.log('[Network] Chain ID:', chainId, '| Is Polygon:', isPolygon, '| Expected:', POLYGON_CHAIN_ID);
+      console.log('[Addresses] EOA:', address);
+      console.log('[Addresses] Proxy Wallet:', proxyWalletAddress || 'NOT DEPLOYED');
+      console.log('[Addresses] Has Proxy Wallet:', hasProxyWallet);
+      console.log('---');
+      console.log('[EOA Balance] useBalance Hook:', eoaBalance?.formatted || 'N/A', 'USDC');
+      console.log('[EOA Balance] Is Loading:', isLoadingEoaBalance);
+      console.log('[EOA Balance] Error:', eoaBalanceError?.message || 'none');
+      console.log('[EOA Balance] Manual Fallback:', manualBalanceFormatted || 'N/A', 'USDC');
+      console.log('[EOA Balance] ✅ DISPLAY BALANCE:', displayEoaBalance, 'USDC');
+      console.log('---');
+      console.log('[Proxy Balance] useBalance Hook:', proxyBalance?.formatted || 'N/A', 'USDC');
+      console.log('[Proxy Balance] Is Loading:', isLoadingProxyBalance);
+      console.log('[Proxy Balance] Error:', proxyBalanceError?.message || 'none');
+      console.log('[Proxy Balance] ✅ DISPLAY BALANCE:', displayProxyBalance, 'USDC');
       console.log('==================================');
+
+      // Additional raw data for debugging
+      if (eoaBalance) {
+        console.log('[RAW] EOA Balance Object:', JSON.stringify({
+          formatted: eoaBalance.formatted,
+          decimals: eoaBalance.decimals,
+          symbol: eoaBalance.symbol,
+          value: eoaBalance.value?.toString(),
+        }, null, 2));
+      }
+      if (proxyBalance) {
+        console.log('[RAW] Proxy Balance Object:', JSON.stringify({
+          formatted: proxyBalance.formatted,
+          decimals: proxyBalance.decimals,
+          symbol: proxyBalance.symbol,
+          value: proxyBalance.value?.toString(),
+        }, null, 2));
+      }
     }
   }, [open, address, chainId, isPolygon, eoaBalance, eoaBalanceError, proxyWalletAddress, proxyBalance, proxyBalanceError, hasProxyWallet, isLoadingEoaBalance, isLoadingProxyBalance, manualBalanceFormatted, displayEoaBalance, displayProxyBalance]);
 
