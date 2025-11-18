@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -203,28 +203,58 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
     parseFloat(manualBalanceFormatted) > 0
   ) ? manualBalanceFormatted : null;
 
-  // CRITICAL FIX: Get proxy wallet USDC balance
-  // Always fetch from Polygon (where USDC is held)
+  // CRITICAL FIX: Get proxy wallet USDC balance - CHECK BOTH TOKENS!
+  // Proxy wallet can have BOTH native and bridged USDC
   const {
-    data: proxyBalance,
-    refetch: refetchProxyBalance,
-    isLoading: isLoadingProxyBalance,
-    error: proxyBalanceError
+    data: proxyBalanceNative,
+    refetch: refetchProxyNative,
+    isLoading: isLoadingProxyNative,
+    error: proxyErrorNative
   } = useBalance({
     address: proxyWalletAddress || undefined,
-    token: POLYGON_USDC_ADDRESS,
-    chainId: polygon.id, // Always fetch from Polygon
+    token: POLYGON_USDC_NATIVE,
+    chainId: polygon.id,
     query: {
       enabled: !!proxyWalletAddress && open,
-      refetchInterval: 5000, // Refetch every 5 seconds to watch for balance changes
-      retry: 3, // Retry 3 times if fails
-      retryDelay: 1000, // Wait 1s between retries
+      refetchInterval: 5000,
+      retry: 3,
+      retryDelay: 1000,
     },
   });
 
+  const {
+    data: proxyBalanceBridged,
+    refetch: refetchProxyBridged,
+    isLoading: isLoadingProxyBridged,
+    error: proxyErrorBridged
+  } = useBalance({
+    address: proxyWalletAddress || undefined,
+    token: POLYGON_USDC_BRIDGED,
+    chainId: polygon.id,
+    query: {
+      enabled: !!proxyWalletAddress && open,
+      refetchInterval: 5000,
+      retry: 3,
+      retryDelay: 1000,
+    },
+  });
+
+  // Calculate total proxy balance (sum of both)
+  const proxyNativeAmount = parseFloat(proxyBalanceNative?.formatted || '0');
+  const proxyBridgedAmount = parseFloat(proxyBalanceBridged?.formatted || '0');
+  const proxyTotalAmount = proxyNativeAmount + proxyBridgedAmount;
+
+  const refetchProxyBalance = useCallback(() => {
+    refetchProxyNative();
+    refetchProxyBridged();
+  }, [refetchProxyNative, refetchProxyBridged]);
+
+  const isLoadingProxyBalance = isLoadingProxyNative || isLoadingProxyBridged;
+  const proxyBalanceError = proxyErrorNative || proxyErrorBridged;
+
   // CRITICAL: Calculate display balances (prioritize manual fallback if useBalance failed)
   const displayEoaBalance = manualEoaBalance || eoaBalance?.formatted || '0.00';
-  const displayProxyBalance = proxyBalance?.formatted || '0.00';
+  const displayProxyBalance = proxyTotalAmount > 0 ? proxyTotalAmount.toFixed(6) : '0.00';
 
   // Enhanced debug logging - DUAL USDC CHECK
   useEffect(() => {
@@ -240,13 +270,12 @@ export function FundWalletModal({ open, onOpenChange }: FundWalletModalProps) {
       console.log('[SELECTED] Using:', selectedUsdcType, '| Address:', selectedUsdcAddress);
       console.log('[EOA Balance] ✅ DISPLAY BALANCE:', displayEoaBalance, 'USDC');
       console.log('---');
-      console.log('[Proxy Balance] useBalance Hook:', proxyBalance?.formatted || 'N/A', 'USDC');
-      console.log('[Proxy Balance] Is Loading:', isLoadingProxyBalance);
-      console.log('[Proxy Balance] Error:', proxyBalanceError?.message || 'none');
-      console.log('[Proxy Balance] ✅ DISPLAY BALANCE:', displayProxyBalance, 'USDC');
+      console.log('[Proxy Native] Balance:', proxyNativeAmount, 'USDC | Loading:', isLoadingProxyNative, '| Error:', proxyErrorNative?.message || 'none');
+      console.log('[Proxy Bridged] Balance:', proxyBridgedAmount, 'USDC | Loading:', isLoadingProxyBridged, '| Error:', proxyErrorBridged?.message || 'none');
+      console.log('[Proxy TOTAL] ✅ DISPLAY BALANCE:', displayProxyBalance, 'USDC (Native:', proxyNativeAmount, '+ Bridged:', proxyBridgedAmount + ')');
       console.log('==================================');
     }
-  }, [open, address, chainId, isPolygon, nativeFormatted, bridgedFormatted, selectedUsdcType, selectedUsdcAddress, displayEoaBalance, displayProxyBalance, isLoadingNative, isLoadingBridged, errorNative, errorBridged, proxyWalletAddress, hasProxyWallet, proxyBalance, isLoadingProxyBalance, proxyBalanceError]);
+  }, [open, address, chainId, isPolygon, nativeFormatted, bridgedFormatted, selectedUsdcType, selectedUsdcAddress, displayEoaBalance, displayProxyBalance, isLoadingNative, isLoadingBridged, errorNative, errorBridged, proxyWalletAddress, hasProxyWallet, isLoadingProxyNative, isLoadingProxyBridged, proxyErrorNative, proxyErrorBridged, proxyNativeAmount, proxyBridgedAmount]);
 
   // Wait for transaction
   const { isLoading: isWaitingTx, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
