@@ -280,9 +280,8 @@ export function usePlacePrediction() {
         });
 
         // OPTION 1: Try gasless approval via Relayer first (if Builder Signing Server configured)
-        const signingServerUrl = typeof window !== 'undefined'
-          ? (window as any).ENV?.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL
-          : process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
+        // NEXT_PUBLIC_* env vars are automatically available in browser at build time
+        const signingServerUrl = process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
 
         if (signingServerUrl) {
           console.log('🚀 Attempting gasless approval via Builder Signing Server:', signingServerUrl);
