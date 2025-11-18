@@ -44,19 +44,24 @@ function kalshiToParsedMatch(kalshiMatch: any): ParsedMatch {
 }
 
 /**
- * Hook to fetch Kalshi markets (Soccer category)
- * Per Kalshi docs: Markets are fetched via REST API
+ * Hook to fetch Kalshi markets (Sports category)
+ * Per Kalshi docs: Markets are fetched via REST API with login-based authentication
+ *
+ * FIXED: Proper category parameter and removed duplicate conversion
+ * (fetchKalshiMarkets already returns ParsedMatch[] format)
  */
 export function useKalshiMarkets() {
   return useQuery({
-    queryKey: ['kalshi-markets', 'soccer'],
+    queryKey: ['kalshi-markets', 'sports'],
     queryFn: async () => {
-      const markets = await fetchKalshiMarkets('soccer', 50);
-      // Convert to ParsedMatch format
-      return markets.map(kalshiToParsedMatch);
+      // Fetch markets (already in ParsedMatch format)
+      const markets = await fetchKalshiMarkets('sports', 50);
+      return markets;
     },
     staleTime: 60 * 1000, // 1 minute
     refetchInterval: 60 * 1000, // Refetch every minute
+    retry: 3, // Retry 3 times on failure
+    retryDelay: 1000, // Wait 1s between retries
   });
 }
 
