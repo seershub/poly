@@ -97,3 +97,4 @@ NEXT_PUBLIC_BASE_RPC_URL=https://base-mainnet.infura.io/v3/YOUR_INFURA_PROJECT_I
 - [ ] Tüm environment variables Production, Preview, Development için ayarlandı
 - [ ] Yeni deployment yapıldı
 
+

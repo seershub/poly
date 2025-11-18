@@ -224,3 +224,4 @@ If you get CORS errors, add CORS headers to the Builder Signing Server or use a 
 4. ✅ Configure Next.js environment variables
 5. ✅ Test gasless transactions
 
+

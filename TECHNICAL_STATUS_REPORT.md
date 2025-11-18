@@ -277,3 +277,4 @@ c431bc8 - Fix: Add account parameter to writeContract call
 **Son Güncelleme:** 2025-01-XX  
 **Hazırlayan:** AI Assistant (Claude)
 
+

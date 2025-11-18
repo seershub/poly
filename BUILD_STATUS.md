@@ -82,3 +82,4 @@ KALSHI_API_SECRET=your_kalshi_api_secret
 - Kalshi entegrasyonu şu an placeholder - API key'ler eklendikten sonra test edilmeli
 - Solana entegrasyonu için ayrı bir SDK gerekiyor (`@solana/web3.js`)
 
+
