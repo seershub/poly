@@ -315,79 +315,24 @@ export function usePlacePrediction() {
           const data = encodeFunctionData({
             abi: [erc20Interface],
             functionName: 'approve',
-            args: [POLYMARKET_CLOB_ADDRESS, BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935')] // MaxUint256
+            args: [POLYMARKET_CLOB_ADDRESS, BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')]
           });
 
-          // 3. Sign Transaction (EIP-712)
-          // Domain separator for Safe
-          const domain = {
-            verifyingContract: proxyWalletAddress,
-            chainId: chainId,
-          };
-
-          const types = {
-            SafeTx: [
-              { name: 'to', type: 'address' },
-              { name: 'value', type: 'uint256' },
-              { name: 'data', type: 'bytes' },
-              { name: 'operation', type: 'uint8' },
-              { name: 'safeTxGas', type: 'uint256' },
-              { name: 'baseGas', type: 'uint256' },
-              { name: 'gasPrice', type: 'uint256' },
-              { name: 'gasToken', type: 'address' },
-              { name: 'refundReceiver', type: 'address' },
-              { name: 'nonce', type: 'uint256' },
-            ],
-          };
-
-          const message = {
+          // 3. Create SafeTransaction object (Relayer will handle execution)
+          const approvalTransaction = {
             to: usdcToUse,
-            value: BigInt(0),
+            operation: 0, // Call operation
             data: data,
-            operation: 0, // Call
-            safeTxGas: BigInt(0),
-            baseGas: BigInt(0),
-            gasPrice: BigInt(0),
-            gasToken: '0x0000000000000000000000000000000000000000',
-            refundReceiver: '0x0000000000000000000000000000000000000000',
-            nonce: nonce,
+            value: '0'
           };
 
-          // Sign with Wallet Client
-          const signature = await walletClient.signTypedData({
-            domain,
-            types,
-            primaryType: 'SafeTx',
-            message,
-          });
-
-          console.log('Signed Safe Tx:', signature);
-
-          // 4. Send to Relayer Proxy
-          // We need to send the transaction details + signature
-          const payload = {
-            to: usdcToUse,
-            data: data,
-            value: '0',
-            operation: 0,
-            safeTxGas: '0',
-            baseGas: '0',
-            gasPrice: '0',
-            gasToken: '0x0000000000000000000000000000000000000000',
-            refundReceiver: '0x0000000000000000000000000000000000000000',
-            nonce: nonce.toString(),
-            signatures: signature,
-          };
-
-          // Call our API route
-          // We use the manual proxy to forward the signed transaction
+          // 4. Send to Relayer via our server proxy
           const response = await fetch('/api/relay', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              method: 'POST',
-              path: '/submit',
-              data: payload // The signed Safe transaction
+              transactions: [approvalTransaction],
+              metadata: 'Approve USDC for Polymarket CLOB'
             })
           });
 
