@@ -108,26 +108,38 @@ export async function initializeRelayerClient(walletClient: WalletClient): Promi
       return null;
     }
 
-    // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
-    // IMPORTANT: The builderConfig must be passed as the 4th argument
-    const client = new RelayClient(
-      RELAYER_URL,
-      POLYGON_CHAIN_ID,
-      signer,
-      builderConfig
-    );
-
-    console.log('Relayer client initialized successfully with config:', {
-      hasRemote: !!builderConfig.remoteBuilderConfig,
-      remoteUrl: builderConfig.remoteBuilderConfig?.url,
-      hasLocal: !!builderConfig.localBuilderCreds
+    // DEBUG: Log the module structure to understand the import issue
+    // @ts-ignore
+    console.log('Relayer Module Import Debug:', {
+      RelayClient,
+      typeofRelayClient: typeof RelayClient,
+      isConstructor: typeof RelayClient === 'function' && !!RelayClient.prototype && !!RelayClient.prototype.constructor
     });
 
-    return client;
-  } catch (error) {
-    console.error('Error initializing relayer client:', error);
-    return null;
+    // Handle potential import mismatch (ESM vs CommonJS)
   }
+
+    // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
+    // IMPORTANT: The builderConfig must be passed as the 4th argument
+    // @ts-ignore
+    const client = new ClientConstructor(
+    RELAYER_URL,
+    POLYGON_CHAIN_ID,
+    signer,
+    builderConfig
+  );
+
+  console.log('Relayer client initialized successfully with config:', {
+    hasRemote: !!builderConfig.remoteBuilderConfig,
+    remoteUrl: builderConfig.remoteBuilderConfig?.url,
+    hasLocal: !!builderConfig.localBuilderCreds
+  });
+
+  return client;
+} catch (error) {
+  console.error('Error initializing relayer client:', error);
+  return null;
+}
 }
 
 /**
