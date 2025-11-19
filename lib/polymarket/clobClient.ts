@@ -124,138 +124,123 @@ export function initializeClobClient(
     POLYGON_CHAIN_ID,
     undefined, // signer (optional - not needed when using API credentials)
     {
-      key: credentials.apiKey,
-      secret: credentials.apiSecret,
-      passphrase: credentials.apiPassphrase,
-    },
-    signatureType, // signatureType: 0 = EOA, 1 = Magic/Email, 2 = Metamask
-    proxyWalletAddress, // funder (proxy wallet address)
-    builderConfig // builderConfig (for attribution)
-  );
-
-  return clobClient;
-}
-
-/**
- * Place a market order (buy/sell shares)
- * 
- * Per Polymarket docs:
- * - Uses 'size' (shares) NOT 'amount' (USDC)
- * - price: Limit price per share (0-1 range)
- * - size: Number of shares to buy/sell
- * - side: BUY or SELL
- * 
+      * Per Polymarket docs:
+ * - Uses 'size'(shares) NOT 'amount'(USDC)
+ * - price: Limit price per share(0 - 1 range)
+  * - size: Number of shares to buy / sell
+  * - side: BUY or SELL
+  * 
  * CRITICAL: Order must be signed before posting to CLOB
- */
+  */
 export async function placePrediction(params: {
-  clobClient: ClobClient;
-  walletClient: WalletClient;
-  tokenId: string;
-  side: 'BUY' | 'SELL';
-  size: number; // Number of shares
-  price: number; // Limit price per share (0-1 range)
-}): Promise<PlacedOrder> {
-  try {
-    const { clobClient, walletClient, tokenId, side, size, price } = params;
+    clobClient: ClobClient;
+    walletClient: WalletClient;
+    tokenId: string;
+    side: 'BUY' | 'SELL';
+    size: number; // Number of shares
+    price: number; // Limit price per share (0-1 range)
+  }): Promise<PlacedOrder> {
+    try {
+      const { clobClient, walletClient, tokenId, side, size, price } = params;
 
-    // Convert wagmi WalletClient to ethers Signer (required for order signing)
-    const signer = walletClientToSigner(walletClient);
+      // Convert wagmi WalletClient to ethers Signer (required for order signing)
+      const signer = walletClientToSigner(walletClient);
 
-    // Per Polymarket docs: Create UserOrder object
-    // tokenID: The condition token ID for the market outcome
-    // price: Limit price (0-1 range, e.g., 0.65 = $0.65 per share)
-    // size: Number of shares
-    // side: BUY or SELL
-    const userOrder = {
-      tokenID: tokenId,
-      price,
-      size,
-      side: side === 'BUY' ? Side.BUY : Side.SELL,
-    };
+      // Per Polymarket docs: Create UserOrder object
+      // tokenID: The condition token ID for the market outcome
+      // price: Limit price (0-1 range, e.g., 0.65 = $0.65 per share)
+      // size: Number of shares
+      // side: BUY or SELL
+      const userOrder = {
+        tokenID: tokenId,
+        price,
+        size,
+        side: side === 'BUY' ? Side.BUY : Side.SELL,
+      };
 
-    // Per Polymarket docs: Create and sign the order
-    // createOrder signs the order using the signer
-    const signedOrder = await clobClient.createOrder(userOrder);
+      // Per Polymarket docs: Create and sign the order
+      // createOrder signs the order using the signer
+      const signedOrder = await clobClient.createOrder(userOrder);
 
-    // Per Polymarket docs: Post the signed order to the CLOB
-    // orderType defaults to OrderType.GTC (Good Till Cancel)
-    const orderResponse = await clobClient.postOrder(signedOrder);
+      // Per Polymarket docs: Post the signed order to the CLOB
+      // orderType defaults to OrderType.GTC (Good Till Cancel)
+      const orderResponse = await clobClient.postOrder(signedOrder);
 
-    return {
-      orderID: orderResponse.orderID,
-      transactionHash: orderResponse.transactionHash,
-      status: 'LIVE',
-      timestamp: Date.now(),
-    };
-  } catch (error) {
-    console.error('Error placing prediction:', error);
-    throw new Error('Failed to place prediction order');
+      return {
+        orderID: orderResponse.orderID,
+        transactionHash: orderResponse.transactionHash,
+        status: 'LIVE',
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      console.error('Error placing prediction:', error);
+      throw new Error('Failed to place prediction order');
+    }
   }
-}
 
-/**
- * Get order book for a market
- */
-export async function getOrderBook(
-  clobClient: ClobClient,
-  tokenId: string
-) {
-  try {
-    return await clobClient.getOrderBook(tokenId);
-  } catch (error) {
-    console.error('Error fetching order book:', error);
-    return null;
+  /**
+   * Get order book for a market
+   */
+  export async function getOrderBook(
+    clobClient: ClobClient,
+    tokenId: string
+  ) {
+    try {
+      return await clobClient.getOrderBook(tokenId);
+    } catch (error) {
+      console.error('Error fetching order book:', error);
+      return null;
+    }
   }
-}
 
-/**
- * Get user orders
- */
-export async function getUserOrders(
-  clobClient: ClobClient,
-  address: string
-) {
-  try {
-    // Note: The CLOB client API for fetching user orders may vary
-    // For now, returning empty array. This can be implemented later
-    // using the correct API endpoint
-    return [];
-  } catch (error) {
-    console.error('Error fetching user orders:', error);
-    return [];
+  /**
+   * Get user orders
+   */
+  export async function getUserOrders(
+    clobClient: ClobClient,
+    address: string
+  ) {
+    try {
+      // Note: The CLOB client API for fetching user orders may vary
+      // For now, returning empty array. This can be implemented later
+      // using the correct API endpoint
+      return [];
+    } catch (error) {
+      console.error('Error fetching user orders:', error);
+      return [];
+    }
   }
-}
 
-/**
- * Cancel an order
- * Note: This functionality can be implemented when needed
- */
-export async function cancelOrder(
-  clobClient: ClobClient,
-  orderId: string
-) {
-  try {
-    // Implementation depends on the correct CLOB API method
-    throw new Error('Cancel order not yet implemented');
-  } catch (error) {
-    console.error('Error cancelling order:', error);
-    throw new Error('Failed to cancel order');
+  /**
+   * Cancel an order
+   * Note: This functionality can be implemented when needed
+   */
+  export async function cancelOrder(
+    clobClient: ClobClient,
+    orderId: string
+  ) {
+    try {
+      // Implementation depends on the correct CLOB API method
+      throw new Error('Cancel order not yet implemented');
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      throw new Error('Failed to cancel order');
+    }
   }
-}
 
-/**
- * Get market trades
- * Note: This functionality can be implemented when needed
- */
-export async function getMarketTrades(
-  clobClient: ClobClient,
-  tokenId: string
-) {
-  try {
-    // Implementation depends on the correct CLOB API method
-    return [];
-  } catch (error) {
-    console.error('Error fetching market trades:', error);
-    return [];
+  /**
+   * Get market trades
+   * Note: This functionality can be implemented when needed
+   */
+  export async function getMarketTrades(
+    clobClient: ClobClient,
+    tokenId: string
+  ) {
+    try {
+      // Implementation depends on the correct CLOB API method
+      return [];
+    } catch (error) {
+      console.error('Error fetching market trades:', error);
+      return [];
+    }
   }
-}
