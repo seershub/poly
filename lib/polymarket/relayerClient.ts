@@ -12,7 +12,7 @@
 
 // @polymarket/builder-relayer-client may not be published yet
 // Using dynamic import to handle missing package gracefully
-// import { RelayClient } from '@polymarket/builder-relayer-client';
+import { RelayClient } from '@polymarket/builder-relayer-client';
 import { BuilderConfig, BuilderApiKeyCreds } from '@polymarket/builder-signing-sdk';
 import { ethers } from 'ethers';
 import type { WalletClient } from 'viem';
@@ -97,20 +97,6 @@ function getBuilderConfig(): BuilderConfig | undefined {
  */
 export async function initializeRelayerClient(walletClient: WalletClient): Promise<any> {
   try {
-    // Dynamic import to handle missing package gracefully
-    // Using string-based import to prevent Next.js build-time analysis
-    let RelayClient: any;
-    try {
-      // Use Function constructor to prevent webpack from analyzing this import at build time
-      const importRelayer = new Function('return import("@polymarket/builder-relayer-client")');
-      const relayerModule = await importRelayer();
-      RelayClient = relayerModule.RelayClient;
-    } catch (importError) {
-      console.warn('@polymarket/builder-relayer-client not found. Relayer features disabled.');
-      console.warn('If you need relayer features, ensure the package is installed: npm install @polymarket/builder-relayer-client');
-      return null;
-    }
-
     // Convert wagmi WalletClient to ethers Signer (required for RelayClient)
     const signer = walletClientToSigner(walletClient);
 
