@@ -1,16 +1,12 @@
 /**
- * Kalshi API Integration - SIMPLIFIED VERSION
+ * Kalshi API Integration - RSA SIGNATURE AUTHENTICATION
  *
- * Using API Key authentication (simpler than login-based)
- * Per Kalshi docs: Some endpoints support API key in header
- *
- * REVERT REASON: Login-based auth requires KALSHI_EMAIL/KALSHI_PASSWORD
- * but Vercel already has KALSHI_API_KEY/KALSHI_API_SECRET configured.
- * Reverting to simpler API key auth for faster deployment.
+ * Uses RSA-PSS signature for authentication (required for Kalshi API v2)
  */
 
 import axios from 'axios';
-import { KALSHI_API_URL, KALSHI_API_KEY } from '@/lib/constants';
+import { KALSHI_API_URL, KALSHI_API_KEY, KALSHI_API_SECRET } from '@/lib/constants';
+import { generateKalshiSignature, formatPrivateKey } from './auth';
 import type { ParsedMatch } from '@/types/match';
 
 // Kalshi API Response Types
@@ -81,117 +77,89 @@ function kalshiMarketToMatch(market: KalshiMarket): ParsedMatch {
 }
 
 /**
+ * Helper to make authenticated requests to Kalshi
+ */
+async function kalshiRequest<T>(method: 'GET' | 'POST', endpoint: string, params: any = {}): Promise<T> {
+  if (!KALSHI_API_KEY || !KALSHI_API_SECRET) {
+    throw new Error('Kalshi credentials missing (KALSHI_API_KEY or KALSHI_API_SECRET)');
+  }
+
+  const timestamp = Date.now();
+  // Endpoint for signature should NOT include query params or base URL
+  // e.g., /trade-api/v2/markets
+  const path = `/trade-api/v2${endpoint}`;
+
+  const privateKey = formatPrivateKey(KALSHI_API_SECRET);
+  const signature = generateKalshiSignature(timestamp, method, path, privateKey);
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'KALSHI-ACCESS-KEY': KALSHI_API_KEY,
+    'KALSHI-ACCESS-TIMESTAMP': timestamp.toString(),
+    'KALSHI-ACCESS-SIGNATURE': signature,
+  };
+
+  const url = `${KALSHI_API_URL}${endpoint}`;
+
+  const response = await axios({
+    method,
+    url,
+    headers,
+    params: method === 'GET' ? params : undefined,
+    data: method === 'POST' ? params : undefined,
+    timeout: 15000,
+  });
+
+  return response.data;
+}
+
+/**
  * Fetch active Kalshi markets
- *
- * SIMPLIFIED: Using API key in header (if available)
- * Otherwise return empty array (graceful degradation)
  */
 export async function fetchKalshiMarkets(
   category: string = 'sports',
   limit: number = 50
 ): Promise<ParsedMatch[]> {
-  console.log('=== Kalshi API: Fetching Markets ===');
+  console.log('=== Kalshi API: Fetching Markets (RSA Auth) ===');
 
   try {
-    // Check if API key is configured
-    if (!KALSHI_API_KEY || KALSHI_API_KEY === '' || KALSHI_API_KEY === 'your_api_key') {
-      console.warn('[Kalshi API] ❌ API key not configured or using placeholder value');
-      console.warn('[Kalshi API] Set KALSHI_API_KEY in environment variables');
-      console.warn('[Kalshi API] Skipping Kalshi markets (graceful degradation)');
-      return []; // Graceful degradation
+    if (!KALSHI_API_KEY || !KALSHI_API_SECRET) {
+      console.warn('[Kalshi API] ❌ Credentials not configured');
+      return [];
     }
 
-    console.log('[Kalshi API] ✅ API key configured');
     console.log('[Kalshi API] Fetching from:', KALSHI_API_URL);
-    console.log('[Kalshi API] Params:', { category, limit, status: 'open' });
 
-    // Fetch markets from Kalshi API
-    const response = await axios.get<KalshiMarketsResponse>(`${KALSHI_API_URL}/markets`, {
-      params: {
-        limit,
-        status: 'open', // Only fetch open markets
-      },
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-API-Key': KALSHI_API_KEY,
-      },
-      timeout: 15000,
+    const data = await kalshiRequest<KalshiMarketsResponse>('GET', '/markets', {
+      limit,
+      status: 'open',
     });
 
-    console.log('[Kalshi API] ✅ Response received:', {
-      status: response.status,
-      totalMarkets: response.data.markets?.length || 0,
-    });
-
-    // Log sample of raw markets (first 3) for debugging
-    if (response.data.markets && response.data.markets.length > 0) {
-      console.log('[Kalshi API] Sample markets (first 3):',
-        response.data.markets.slice(0, 3).map(m => ({
-          ticker: m.ticker,
-          title: m.title,
-          category: m.category,
-          status: m.status,
-        }))
-      );
-    }
+    console.log('[Kalshi API] ✅ Response received, markets:', data.markets?.length || 0);
 
     // Filter for sports markets
-    const allMarkets = response.data.markets || [];
+    const allMarkets = data.markets || [];
     const sportsKeywords = ['sport', 'nfl', 'nba', 'mlb', 'soccer', 'football', 'basketball', 'hockey', 'nhl', 'tennis', 'golf'];
 
     const filteredMarkets = allMarkets.filter((market: KalshiMarket) => {
       const cat = market.category?.toLowerCase() || '';
       const title = market.title?.toLowerCase() || '';
-      const subtitle = market.subtitle?.toLowerCase() || '';
-
-      // Check if any sports keyword appears in category, title, or subtitle
-      return sportsKeywords.some(keyword =>
-        cat.includes(keyword) ||
-        title.includes(keyword) ||
-        subtitle.includes(keyword)
-      );
-    });
-
-    console.log('[Kalshi API] Filtered markets:', {
-      total: allMarkets.length,
-      sportsOnly: filteredMarkets.length,
-      filterKeywords: sportsKeywords.join(', '),
+      return sportsKeywords.some(keyword => cat.includes(keyword) || title.includes(keyword));
     });
 
     // Convert to ParsedMatch format
     const matches = filteredMarkets.map(kalshiMarketToMatch);
-
-    console.log('[Kalshi API] ✅ Successfully converted', matches.length, 'Kalshi markets');
-    console.log('=====================================');
-
     return matches;
+
   } catch (error: any) {
     console.error('=== Kalshi API Error ===');
     console.error('[Kalshi API] ❌ Error:', error.message);
-
     if (error.response) {
-      console.error('[Kalshi API] Response status:', error.response.status);
-      console.error('[Kalshi API] Response data:', error.response.data);
-
-      if (error.response.status === 401) {
-        console.error('[Kalshi API] 401 Unauthorized - API key might be invalid');
-      } else if (error.response.status === 403) {
-        console.error('[Kalshi API] 403 Forbidden - API key might not have required permissions');
-      } else if (error.response.status === 429) {
-        console.error('[Kalshi API] 429 Rate Limited - too many requests');
-      } else if (error.response.status === 404) {
-        console.error('[Kalshi API] 404 Not Found - endpoint might be incorrect');
-      }
-    } else if (error.request) {
-      console.error('[Kalshi API] No response received - network error or timeout');
-    } else {
-      console.error('[Kalshi API] Request setup error:', error.message);
+      console.error('[Kalshi API] Status:', error.response.status);
+      console.error('[Kalshi API] Data:', error.response.data);
     }
-
-    console.log('[Kalshi API] Returning empty array (graceful degradation)');
-    console.log('========================');
-    return []; // Graceful degradation
+    return [];
   }
 }
 
@@ -200,31 +168,10 @@ export async function fetchKalshiMarkets(
  */
 export async function fetchKalshiMarket(ticker: string): Promise<ParsedMatch | null> {
   try {
-    if (!KALSHI_API_KEY || KALSHI_API_KEY === '') {
-      console.warn('[Kalshi API] API key not configured');
-      return null;
-    }
-
-    console.log(`[Kalshi API] Fetching market: ${ticker}...`);
-
-    const response = await axios.get<KalshiMarket>(`${KALSHI_API_URL}/markets/${ticker}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-API-Key': KALSHI_API_KEY,
-      },
-      timeout: 15000,
-    });
-
-    console.log('[Kalshi API] Market fetched successfully');
-
-    return kalshiMarketToMatch(response.data);
+    const data = await kalshiRequest<KalshiMarket>('GET', `/markets/${ticker}`);
+    return kalshiMarketToMatch(data);
   } catch (error: any) {
-    console.error(`[Kalshi API] Error fetching market ${ticker}:`, {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-    });
+    console.error(`[Kalshi API] Error fetching market ${ticker}:`, error.message);
     return null;
   }
 }

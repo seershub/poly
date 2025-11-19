@@ -39,11 +39,8 @@ export const BASE_USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as
 // Kalshi API Configuration
 // Per Kalshi docs: https://docs.kalshi.com
 // Kalshi is a centralized exchange and doesn't require blockchain integration
-// Authentication: Login-based (email/password) returns JWT token (expires in 30 minutes)
+// Authentication: RSA Signature-based (API Key + Private Key)
 export const KALSHI_API_URL: string = process.env.NEXT_PUBLIC_KALSHI_API_URL || 'https://api.kalshi.com/trade-api/v2';
-export const KALSHI_EMAIL: string = process.env.KALSHI_EMAIL || '';
-export const KALSHI_PASSWORD: string = process.env.KALSHI_PASSWORD || '';
-// Deprecated: Signature-based auth (not implemented)
 export const KALSHI_API_KEY: string = process.env.KALSHI_API_KEY || '';
 export const KALSHI_API_SECRET: string = process.env.KALSHI_API_SECRET || '';
 
