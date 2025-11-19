@@ -114,7 +114,7 @@ export function usePlacePrediction() {
 
   // Write contract hook for approval
   const {
-    writeContract: approveUsdc,
+    writeContractAsync: approveUsdc,
     data: approvalTxHash,
   } = useWriteContract();
 
@@ -328,30 +328,33 @@ export function usePlacePrediction() {
         console.log('Initiating manual USDC approval...');
 
         try {
-          approveUsdc({
+          // Execute the approval transaction
+          const hash = await approveUsdc({
             address: usdcToUse,
             abi: USDC_ABI,
             functionName: 'approve',
             args: [POLYMARKET_CLOB_ADDRESS, BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935')], // MaxUint256
           });
 
-          // We need to wait for the approval to confirm before proceeding
-          // Since useWriteContract doesn't return a Promise that resolves on confirmation,
-          // we rely on the UI to handle the 'isApproving' state and the user re-clicking 'Predict'
-          // OR we throw a special error to stop execution but keep the UI in 'Approving' state.
+          console.log('Approval transaction sent:', hash);
+          console.log('Waiting for confirmation...');
 
-          // However, the current flow expects this function to complete.
-          // Since we can't easily await the hook's state change here without refactoring to an effect,
-          // we will throw a specific error that the UI can interpret as "Approval Initiated".
+          // Wait for the transaction to be confirmed on-chain
+          // This prevents the "loop" where we retry before the allowance is updated
+          const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-          throw new Error('Approval transaction initiated. Please confirm in your wallet and wait for confirmation.');
+          if (receipt.status !== 'success') {
+            throw new Error('Approval transaction reverted.');
+          }
+
+          console.log('✅ Approval confirmed. Proceeding with order...');
+
+          // Wait a moment for the node to index the new allowance
+          await new Promise(resolve => setTimeout(resolve, 2000));
 
         } catch (err: any) {
-          if (err.message.includes('Approval transaction initiated')) {
-            throw err;
-          }
           console.error('Manual approval failed:', err);
-          throw new Error('Failed to initiate approval transaction. Please try again.');
+          throw new Error(`Approval failed: ${err.message || 'User rejected request'}`);
         }
       }
 

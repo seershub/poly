@@ -19,7 +19,7 @@ function getBuilderConfig() {
   const builderApiKey = typeof window === 'undefined' ? process.env.POLY_BUILDER_API_KEY : undefined;
   const builderSecret = typeof window === 'undefined' ? process.env.POLY_BUILDER_SECRET : undefined;
   const builderPassphrase = typeof window === 'undefined' ? process.env.POLY_BUILDER_PASSPHRASE : undefined;
-  
+
   // Client-side accessible: Signing server URL (if using remote signing)
   const signingServerUrl = process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
 
@@ -114,11 +114,11 @@ export function initializeClobClient(
   const builderConfig = getBuilderConfig();
 
   // Per Polymarket docs: ClobClient constructor signature:
-  // new ClobClient(host, chainId, signer, creds, signatureType, funder)
+  // new ClobClient(host, chainId, signer, creds, signatureType, funder, builderConfig)
   // signatureType: 0 = EOA, 1 = Magic/Email, 2 = Metamask
   // funder: Proxy wallet address (where USDC is held)
   const signatureType = proxyWalletAddress ? 2 : 0; // 2 = Metamask (default), 0 = EOA if no proxy
-  
+
   const clobClient = new ClobClient(
     CLOB_API_URL,
     POLYGON_CHAIN_ID,
@@ -129,7 +129,9 @@ export function initializeClobClient(
       passphrase: credentials.apiPassphrase,
     },
     signatureType, // signatureType: 0 = EOA, 1 = Magic/Email, 2 = Metamask
-    proxyWalletAddress // funder (proxy wallet address) - per Polymarket docs: "This is your Polymarket Profile Address, where you send USDC to"
+    proxyWalletAddress, // funder (proxy wallet address)
+    undefined, // verbose
+    builderConfig // builderConfig (for attribution)
   );
 
   return clobClient;

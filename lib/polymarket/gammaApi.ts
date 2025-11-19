@@ -120,17 +120,20 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
       const matchesKeyword = sportsKeywords.some(keyword => {
         const lowerKeyword = keyword.toLowerCase();
         return question.includes(lowerKeyword) ||
-               description.includes(lowerKeyword) ||
-               tags.some((tag: string) => tag.includes(lowerKeyword));
+          description.includes(lowerKeyword) ||
+          tags.some((tag: string) => tag.includes(lowerKeyword));
       });
 
-      // Additional check: if market has 2 or 3 outcomes (2-way or 3-way bets)
-      // RELAXED: Allow 2 or 3 outcomes (was only 2)
-      const hasValidOutcomes = market.outcomes && Array.isArray(market.outcomes) &&
-                               (market.outcomes.length === 2 || market.outcomes.length === 3);
+      // RELAXED: Allow any number of outcomes >= 2
+      const hasValidOutcomes = market.outcomes && Array.isArray(market.outcomes) && market.outcomes.length >= 2;
 
-      // Additional check: if market is active and not closed
+      // RELAXED: Allow closed markets if they are recent (optional, but keeping strict for now)
       const isActive = market.active && !market.closed;
+
+      // DEBUG: Log if a market matches keywords but fails other checks
+      if (matchesKeyword && (!hasValidOutcomes || !isActive)) {
+        console.log(`[DEBUG] Market '${market.question}' matched keywords but failed checks:`, { hasValidOutcomes, isActive });
+      }
 
       return matchesKeyword && hasValidOutcomes && isActive;
     });
@@ -143,9 +146,9 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
       console.log('[DEBUG] Sample rejected markets (first 10):', rejected.map((m: any) => ({
         question: m.question,
         reason: !m.active ? 'not active' :
-                m.closed ? 'closed' :
-                !m.outcomes || m.outcomes.length < 2 ? 'invalid outcomes' :
-                'no keyword match',
+          m.closed ? 'closed' :
+            !m.outcomes || m.outcomes.length < 2 ? 'invalid outcomes' :
+              'no keyword match',
       })));
     }
 
@@ -157,7 +160,7 @@ export async function getSoccerMarkets(): Promise<PolymarketMarket[]> {
     sportsMarkets = sportsMarkets.filter((market: any) => {
       const volume = market.volumeNum || parseFloat(market.volume || '0');
       const liquidity = market.liquidityNum || parseFloat(market.liquidity || '0');
-      
+
       // Show market if it has reasonable volume OR liquidity
       return volume >= MIN_VOLUME || liquidity >= MIN_LIQUIDITY;
     });
