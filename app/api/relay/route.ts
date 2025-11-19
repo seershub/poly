@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ethers } from 'ethers';
-import { RelayClient } from '@polymarket/builder-relayer-client';
+import * as RelayerModule from '@polymarket/builder-relayer-client';
 import { BuilderConfig } from '@polymarket/builder-signing-sdk';
 import { POLYMARKET_RELAYER_URL, POLYGON_CHAIN_ID } from '@/lib/constants';
 
@@ -32,8 +32,19 @@ export async function POST(request: NextRequest) {
             }
         });
 
+        // Robustly resolve RelayClient constructor
+        // Handles Named export, Default export with named property, and Default export as class
+        const RelayClientConstructor = (RelayerModule as any).RelayClient ||
+            (RelayerModule as any).default?.RelayClient ||
+            (RelayerModule as any).default;
+
+        if (typeof RelayClientConstructor !== 'function') {
+            console.error('[Relayer Proxy] Failed to resolve RelayClient constructor:', RelayerModule);
+            throw new Error('Failed to load RelayClient SDK');
+        }
+
         const relayerUrl = POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
-        const client = new RelayClient(relayerUrl, POLYGON_CHAIN_ID, wallet, builderConfig);
+        const client = new RelayClientConstructor(relayerUrl, POLYGON_CHAIN_ID, wallet, builderConfig);
 
         console.log('[Relayer Proxy] Executing transactions via SDK:', {
             count: transactions.length,
