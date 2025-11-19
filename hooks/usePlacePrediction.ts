@@ -313,125 +313,93 @@ export function usePlacePrediction() {
           } as const;
 
           const data = encodeFunctionData({
-            abi: [erc20Interface],
-            functionName: 'approve',
-            args: [POLYMARKET_CLOB_ADDRESS, BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935')] // MaxUint256
-          });
 
-          // 3. Send to Relayer Proxy (Server-Side SDK)
-          // We send the raw transaction details. The Server SDK (RelayClient) will execute it.
-          // Note: We assume the Builder has permission to execute this transaction on the Proxy Wallet.
-          // If not, we might need to sign it here and pass the signature, but RelayClient.executeSafeTransactions
-          // typically signs with the Builder's key.
+            const result = await response.json();
+            console.log('✅ Gasless approval submitted via Relayer:', result.transactionHash);
 
-          const payload = {
-            transactions: [{
-              to: usdcToUse,
-              value: '0',
-              data: data,
-              operation: 0, // Call
-            }],
-            metadata: 'Approve USDC for Polymarket CLOB'
-          };
-
-          // Call our API route
-          const response = await fetch('/api/relay', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-
-          if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.error || 'Relayer request failed');
-          }
-
-          const result = await response.json();
-          console.log('✅ Gasless approval submitted via Relayer:', result.transactionHash);
-
-          // Wait for transaction
-          // The result usually contains transactionHash immediately if successful
-          if (result.transactionHash) {
-            const receipt = await publicClient.waitForTransactionReceipt({ hash: result.transactionHash });
-            if (receipt.status !== 'success') throw new Error('Gasless transaction reverted');
-          }
+            // Wait for transaction
+            // The result usually contains transactionHash immediately if successful
+            if(result.transactionHash) {
+              const receipt = await publicClient.waitForTransactionReceipt({ hash: result.transactionHash });
+          if (receipt.status !== 'success') throw new Error('Gasless transaction reverted');
+        }
 
           console.log('✅ Gasless approval confirmed');
 
-          // Wait a moment for indexer
-          await new Promise(resolve => setTimeout(resolve, 2000));
+        // Wait a moment for indexer
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-        } catch (relayerError: any) {
-          console.warn('⚠️ Gasless approval failed:', relayerError.message);
+      } catch (relayerError: any) {
+        console.warn('⚠️ Gasless approval failed:', relayerError.message);
 
-          // CRITICAL: If using Proxy Wallet, we CANNOT fallback to manual approval from EOA
-          // because the EOA is not the one holding the funds (the Proxy Wallet is).
-          // The user cannot manually approve from the Proxy Wallet without the Relayer (or complex Safe interaction).
-          if (proxyWalletAddress) {
-            throw new Error(`Gasless approval failed: ${relayerError.message}. Cannot fallback to manual approval for Proxy Wallet. Please try again later.`);
-          }
-
-          console.warn('Falling back to manual approval (EOA only)...');
-          // Fallthrough to manual approval ONLY if not using Proxy Wallet (which shouldn't happen here due to earlier checks, but safe to keep for EOA users)
+        // CRITICAL: If using Proxy Wallet, we CANNOT fallback to manual approval from EOA
+        // because the EOA is not the one holding the funds (the Proxy Wallet is).
+        // The user cannot manually approve from the Proxy Wallet without the Relayer (or complex Safe interaction).
+        if (proxyWalletAddress) {
+          throw new Error(`Gasless approval failed: ${relayerError.message}. Cannot fallback to manual approval for Proxy Wallet. Please try again later.`);
         }
 
-        // OPTION 2: Manual approval (Fallback or Primary if no server)
-        console.log('Initiating manual USDC approval...');
-
-        try {
-          // Execute the approval transaction
-          const hash = await approveUsdc({
-            address: usdcToUse,
-            abi: USDC_ABI,
-            functionName: 'approve',
-            args: [POLYMARKET_CLOB_ADDRESS, BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935')], // MaxUint256
-          });
-
-          console.log('Approval transaction sent:', hash);
-          console.log('Waiting for confirmation...');
-
-          // Wait for the transaction to be confirmed on-chain
-          // This prevents the "loop" where we retry before the allowance is updated
-          const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-          if (receipt.status !== 'success') {
-            throw new Error('Approval transaction reverted.');
-          }
-
-          console.log('✅ Approval confirmed. Proceeding with order...');
-
-          // Wait a moment for the node to index the new allowance
-          await new Promise(resolve => setTimeout(resolve, 2000));
-
-        } catch (err: any) {
-          console.error('Manual approval failed:', err);
-          throw new Error(`Approval failed: ${err.message || 'User rejected request'}`);
-        }
+        console.warn('Falling back to manual approval (EOA only)...');
+        // Fallthrough to manual approval ONLY if not using Proxy Wallet (which shouldn't happen here due to earlier checks, but safe to keep for EOA users)
       }
+
+      // OPTION 2: Manual approval (Fallback or Primary if no server)
+      console.log('Initiating manual USDC approval...');
+
+      try {
+        // Execute the approval transaction
+        const hash = await approveUsdc({
+          address: usdcToUse,
+          abi: USDC_ABI,
+          functionName: 'approve',
+          args: [POLYMARKET_CLOB_ADDRESS, BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935')], // MaxUint256
+        });
+
+        console.log('Approval transaction sent:', hash);
+        console.log('Waiting for confirmation...');
+
+        // Wait for the transaction to be confirmed on-chain
+        // This prevents the "loop" where we retry before the allowance is updated
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+        if (receipt.status !== 'success') {
+          throw new Error('Approval transaction reverted.');
+        }
+
+        console.log('✅ Approval confirmed. Proceeding with order...');
+
+        // Wait a moment for the node to index the new allowance
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+      } catch (err: any) {
+        console.error('Manual approval failed:', err);
+        throw new Error(`Approval failed: ${err.message || 'User rejected request'}`);
+      }
+    }
 
       console.log('✅ USDC allowance check passed');
 
-      // Initialize CLOB client with proxy wallet address as funder
-      // Per Polymarket docs: Pass proxy wallet address as funder parameter
-      // This ensures orders are placed from the proxy wallet where USDC is held
-      // CRITICAL: proxyWalletAddress must exist at this point (checked earlier)
-      if (!proxyWalletAddress) {
-        throw new Error('Proxy wallet address not available. Please ensure your proxy wallet is deployed.');
-      }
+    // Initialize CLOB client with proxy wallet address as funder
+    // Per Polymarket docs: Pass proxy wallet address as funder parameter
+    // This ensures orders are placed from the proxy wallet where USDC is held
+    // CRITICAL: proxyWalletAddress must exist at this point (checked earlier)
+    if(!proxyWalletAddress) {
+      throw new Error('Proxy wallet address not available. Please ensure your proxy wallet is deployed.');
+    }
       const clobClient = initializeClobClient(credentials, proxyWalletAddress);
 
-      // Place the order
-      const result = await placePrediction({
-        clobClient,
-        walletClient,
-        tokenId,
-        side,
-        size,
-        price,
-      });
+    // Place the order
+    const result = await placePrediction({
+      clobClient,
+      walletClient,
+      tokenId,
+      side,
+      size,
+      price,
+    });
 
-      return result;
-    },
+    return result;
+  },
     onSuccess: () => {
       // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ['user-positions'] });
@@ -443,64 +411,64 @@ export function usePlacePrediction() {
     },
   });
 
-  // Kalshi Prediction Mutation
-  const kalshiMutation = useMutation({
-    mutationFn: async (params: PredictionParams & { ticker?: string }) => {
-      const { side, size, ticker } = params;
+// Kalshi Prediction Mutation
+const kalshiMutation = useMutation({
+  mutationFn: async (params: PredictionParams & { ticker?: string }) => {
+    const { side, size, ticker } = params;
 
-      if (!ticker) throw new Error('Ticker required for Kalshi orders');
+    if (!ticker) throw new Error('Ticker required for Kalshi orders');
 
-      // Import dynamically to avoid server-side issues if any
-      const { createKalshiOrder } = await import('@/lib/kalshi/api');
+    // Import dynamically to avoid server-side issues if any
+    const { createKalshiOrder } = await import('@/lib/kalshi/api');
 
-      // Convert side to lowercase 'yes'/'no'
-      const kalshiSide = side === 'BUY' ? 'yes' : 'no'; // Simplified mapping, assuming BUY YES/NO
-      // Actually, params.side is usually 'BUY' or 'SELL'. 
-      // But in our UI we select "YES" or "NO" and always "BUY".
-      // We need to pass the outcome (YES/NO) from the UI.
-      // The current PredictionParams structure might need adjustment or we infer from tokenId?
-      // For Kalshi, we need to know if we are buying YES or NO.
-      // Let's assume the UI passes the correct side or we adjust the calling code.
+    // Convert side to lowercase 'yes'/'no'
+    const kalshiSide = side === 'BUY' ? 'yes' : 'no'; // Simplified mapping, assuming BUY YES/NO
+    // Actually, params.side is usually 'BUY' or 'SELL'. 
+    // But in our UI we select "YES" or "NO" and always "BUY".
+    // We need to pass the outcome (YES/NO) from the UI.
+    // The current PredictionParams structure might need adjustment or we infer from tokenId?
+    // For Kalshi, we need to know if we are buying YES or NO.
+    // Let's assume the UI passes the correct side or we adjust the calling code.
 
-      return createKalshiOrder(ticker, 'yes', size); // Placeholder: need to pass correct side
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kalshi-markets'] });
-    }
-  });
+    return createKalshiOrder(ticker, 'yes', size); // Placeholder: need to pass correct side
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['kalshi-markets'] });
+  }
+});
 
-  return {
-    predict: (
-      params: PredictionParams & { platform?: string, ticker?: string, outcome?: 'YES' | 'NO' },
-      options?: { onSuccess?: () => void; onError?: (error: any) => void }
-    ) => {
-      if (params.platform === 'kalshi') {
-        // Handle Kalshi
-        if (!params.ticker) {
-          console.error('Ticker missing for Kalshi order');
-          options?.onError?.(new Error('Ticker missing for Kalshi order'));
-          return;
-        }
-        // Map outcome to side
-        const side = params.outcome === 'NO' ? 'no' : 'yes';
-
-        // We need to call createKalshiOrder directly or via mutation
-        // For now, let's just log it as we need to update the mutation above to accept side properly
-        console.log('Placing Kalshi order:', params);
-        // TODO: Call kalshiMutation.mutate
-        // For now simulating success/error for UI testing if mutation isn't fully wired
-        // kalshiMutation.mutate(...)
-      } else {
-        // Handle Polymarket
-        mutation.mutate(params, options);
+return {
+  predict: (
+    params: PredictionParams & { platform?: string, ticker?: string, outcome?: 'YES' | 'NO' },
+    options?: { onSuccess?: () => void; onError?: (error: any) => void }
+  ) => {
+    if (params.platform === 'kalshi') {
+      // Handle Kalshi
+      if (!params.ticker) {
+        console.error('Ticker missing for Kalshi order');
+        options?.onError?.(new Error('Ticker missing for Kalshi order'));
+        return;
       }
-    },
-    isPending: mutation.isPending || isApproving || kalshiMutation.isPending,
-    isSuccess: mutation.isSuccess || kalshiMutation.isSuccess,
-    isError: mutation.isError || kalshiMutation.isError,
-    error: (mutation.error || kalshiMutation.error) as Error | null,
-    isApproving,
-  };
+      // Map outcome to side
+      const side = params.outcome === 'NO' ? 'no' : 'yes';
+
+      // We need to call createKalshiOrder directly or via mutation
+      // For now, let's just log it as we need to update the mutation above to accept side properly
+      console.log('Placing Kalshi order:', params);
+      // TODO: Call kalshiMutation.mutate
+      // For now simulating success/error for UI testing if mutation isn't fully wired
+      // kalshiMutation.mutate(...)
+    } else {
+      // Handle Polymarket
+      mutation.mutate(params, options);
+    }
+  },
+  isPending: mutation.isPending || isApproving || kalshiMutation.isPending,
+  isSuccess: mutation.isSuccess || kalshiMutation.isSuccess,
+  isError: mutation.isError || kalshiMutation.isError,
+  error: (mutation.error || kalshiMutation.error) as Error | null,
+  isApproving,
+};
 }
 
 /**
