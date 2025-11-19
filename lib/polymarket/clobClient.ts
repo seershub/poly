@@ -130,7 +130,6 @@ export function initializeClobClient(
     },
     signatureType, // signatureType: 0 = EOA, 1 = Magic/Email, 2 = Metamask
     proxyWalletAddress, // funder (proxy wallet address)
-    undefined, // verbose
     builderConfig // builderConfig (for attribution)
   );
 
