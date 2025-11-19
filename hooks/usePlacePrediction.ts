@@ -318,84 +318,27 @@ export function usePlacePrediction() {
             args: [POLYMARKET_CLOB_ADDRESS, BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935')] // MaxUint256
           });
 
-          // 3. Sign Transaction (EIP-712)
-          // Domain separator for Safe
-          const domain = {
-            verifyingContract: proxyWalletAddress,
-            chainId: chainId,
-          };
+          // 3. Send to Relayer Proxy (Server-Side SDK)
+          // We send the raw transaction details. The Server SDK (RelayClient) will execute it.
+          // Note: We assume the Builder has permission to execute this transaction on the Proxy Wallet.
+          // If not, we might need to sign it here and pass the signature, but RelayClient.executeSafeTransactions
+          // typically signs with the Builder's key.
 
-          const types = {
-            SafeTx: [
-              { name: 'to', type: 'address' },
-              { name: 'value', type: 'uint256' },
-              { name: 'data', type: 'bytes' },
-              { name: 'operation', type: 'uint8' },
-              { name: 'safeTxGas', type: 'uint256' },
-              { name: 'baseGas', type: 'uint256' },
-              { name: 'gasPrice', type: 'uint256' },
-              { name: 'gasToken', type: 'address' },
-              { name: 'refundReceiver', type: 'address' },
-              { name: 'nonce', type: 'uint256' },
-            ],
-          };
-
-          const message = {
-            to: usdcToUse,
-            value: BigInt(0),
-            data: data,
-            operation: 0, // Call
-            safeTxGas: BigInt(0), // Relayer sets this? Or we set 0 and let relayer estimate?
-            // Usually for gasless, we might need to estimate. 
-            // But let's try 0 first as Relayer often handles estimation if we pass it correctly.
-            // Wait, if we sign 0, the executed tx must use 0?
-            // Polymarket Relayer docs say: "The relayer will estimate the gas limit..."
-            // But the signature MUST match the executed parameters.
-            // If we sign 0, and relayer uses 100000, the signature is invalid.
-            // UNLESS the Relayer uses `execTransaction` with the parameters we signed.
-            // Let's assume 0 for safeTxGas/baseGas/gasPrice is correct for "Relayer pays".
-            baseGas: BigInt(0),
-            gasPrice: BigInt(0),
-            gasToken: '0x0000000000000000000000000000000000000000',
-            refundReceiver: '0x0000000000000000000000000000000000000000',
-            nonce: nonce,
-          };
-
-          // Sign with Wallet Client
-          const signature = await walletClient.signTypedData({
-            domain,
-            types,
-            primaryType: 'SafeTx',
-            message,
-          });
-
-          console.log('Signed Safe Tx:', signature);
-
-          // 4. Send to Relayer Proxy
-          // We need to send the transaction details + signature
           const payload = {
-            to: usdcToUse,
-            data: data,
-            value: '0',
-            operation: 0,
-            safeTxGas: '0',
-            baseGas: '0',
-            gasPrice: '0',
-            gasToken: '0x0000000000000000000000000000000000000000',
-            refundReceiver: '0x0000000000000000000000000000000000000000',
-            nonce: nonce.toString(),
-            signatures: signature,
+            transactions: [{
+              to: usdcToUse,
+              value: '0',
+              data: data,
+              operation: 0, // Call
+            }],
+            metadata: 'Approve USDC for Polymarket CLOB'
           };
 
           // Call our API route
           const response = await fetch('/api/relay', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              method: 'POST',
-              path: '/v1/transactions', // Relayer endpoint
-              data: payload
-            })
+            body: JSON.stringify(payload)
           });
 
           if (!response.ok) {

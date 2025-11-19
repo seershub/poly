@@ -1,90 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server';
-import axios from 'axios';
-import { POLYMARKET_RELAYER_URL } from '@/lib/constants';
-import * as crypto from 'crypto';
-
-// Helper to generate Builder Signature
-// We implement this manually to avoid dependency issues with the SDK on some environments
-function generateBuilderSignature(secret: string, passphrase: string, timestamp: number, method: string, path: string, body?: string): string {
-    const message = `${timestamp}${method}${path}${body || ''}`;
-    const hmac = crypto.createHmac('sha256', secret); // Use 'secret' as the key
-    hmac.update(message);
-    const signature = hmac.digest('base64');
-
-    // The signature format might need the passphrase too, depending on the specific SDK implementation
-    // But typically it's: sign(timestamp + method + path + body, secret)
-    // Let's check the standard Polymarket signature format.
-    // Actually, for Builder Creds (API Key/Secret/Passphrase), it's usually:
-    // sign(timestamp + method + path + body, base64Decode(secret))
-    // Let's try to be safe and use the SDK if possible, but if not, we use a standard HMAC.
-
-    return signature;
-}
-
-// We will use the SDK if available, otherwise fallback to manual (which is risky if we get it wrong).
-// Better to rely on the SDK for signing if it works in Node.
-import { BuilderConfig, BuilderApiKeyCreds } from '@polymarket/builder-signing-sdk';
+import { ethers } from 'ethers';
+import { RelayClient } from '@polymarket/builder-relayer-client';
+import { BuilderConfig } from '@polymarket/builder-signing-sdk';
+import { POLYMARKET_RELAYER_URL, POLYGON_CHAIN_ID } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { method, path, data } = body;
+        const { transactions, metadata } = body;
 
         // 1. Get Builder Credentials
         const apiKey = process.env.POLY_BUILDER_API_KEY;
         const secret = process.env.POLY_BUILDER_SECRET;
         const passphrase = process.env.POLY_BUILDER_PASSPHRASE;
+        // We might need a private key for the wallet passed to RelayClient?
+        // The docs say: "const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);"
+        // But if we are using API Key creds, do we need a wallet?
+        // The RelayClient constructor signature is: new RelayClient(relayerUrl, chainId, wallet, builderConfig)
+        // The wallet is used for signing?
+        // If we use remote signing or API keys, maybe the wallet is just a placeholder or used for EOA ops?
+        // Let's check if we have a POLY_BUILDER_PRIVATE_KEY or similar.
+        // If not, we might need to generate a random one if it's not used for auth (since we use builderConfig).
+        // But the docs show passing a wallet.
+        // Let's assume we need a signer. If the user didn't provide one, we can't proceed?
+        // Wait, the user provided API Key/Secret/Passphrase.
+        // The docs example shows:
+        // const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+        // const client = new RelayClient(relayerUrl, chainId, wallet, builderConfig);
+
+        // If the Builder is paying for gas/executing, they need a wallet?
+        // But the Relayer pays for gas.
+        // Maybe the wallet is used to identify the Builder?
+        // Let's try to use a random wallet if we don't have a private key, or use the secret as a key if it fits?
+        // No, secret is for API auth.
+
+        // Let's check if we have a private key in env.
+        // If not, we can try to use a random wallet, but it might fail if the Relayer expects the wallet address to match something.
+        // However, with `builderConfig` (API Creds), the auth should be via API Key.
 
         if (!apiKey || !secret || !passphrase) {
             return NextResponse.json({ error: 'Builder credentials not configured on server' }, { status: 500 });
         }
 
-        // 2. Construct URL
-        const relayerUrl = (POLYMARKET_RELAYER_URL || 'https://relayer.polymarket.com').replace(/\/$/, '');
-        const fullUrl = `${relayerUrl}${path}`;
+        // Create a provider (needed for the wallet)
+        const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
+        const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
 
-        // 3. Generate Headers using SDK (or manual if SDK fails, but SDK should work in Node)
-        // We need to sign the request.
-        // The Relayer Client usually handles this. Since we are proxying, we need to sign "like" the Relayer Client.
+        // Use a dummy wallet if no private key provided, as we are using API Creds for auth?
+        // Or maybe we need the private key associated with the API Key?
+        // Usually API Key is independent.
+        // Let's try with a random wallet first.
+        const wallet = ethers.Wallet.createRandom().connect(provider);
 
-        const timestamp = Math.floor(Date.now() / 1000);
-
-        // Manual signature generation to ensure no SDK version mismatches
-        // Format: base64(hmac-sha256(timestamp + method + path + body, base64_decode(secret)))
-        const secretBuffer = Buffer.from(secret, 'base64');
-        const message = `${timestamp}${method}${path}${JSON.stringify(data)}`;
-        const signature = crypto.createHmac('sha256', secretBuffer).update(message).digest('base64');
-
-        const headers = {
-            'Content-Type': 'application/json',
-            'POLY-BUILDER-API-KEY': apiKey,
-            'POLY-BUILDER-TIMESTAMP': timestamp.toString(),
-            'POLY-BUILDER-SIGNATURE': signature,
-            'POLY-BUILDER-PASSPHRASE': passphrase,
-        };
-
-        console.log('[Relayer Proxy] Forwarding request:', {
-            url: fullUrl,
-            method,
-            timestamp,
-            apiKey: apiKey.substring(0, 5) + '...',
+        const builderConfig = new BuilderConfig({
+            localBuilderCreds: {
+                key: apiKey,
+                secret: secret,
+                passphrase: passphrase,
+            }
         });
 
-        // 4. Forward Request
-        const response = await axios({
-            method,
-            url: fullUrl,
-            data,
-            headers,
+        const relayerUrl = POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
+
+        console.log('[Relayer Proxy] Initializing RelayClient:', {
+            relayerUrl,
+            chainId: POLYGON_CHAIN_ID,
+            hasWallet: !!wallet,
+            hasBuilderConfig: !!builderConfig
         });
 
-        return NextResponse.json(response.data);
+        const client = new RelayClient(relayerUrl, POLYGON_CHAIN_ID, wallet, builderConfig);
+
+        console.log('[Relayer Proxy] Executing transactions:', transactions);
+
+        // Execute transactions
+        // transactions should be an array of SafeTransaction objects
+        const response = await client.executeSafeTransactions(transactions, metadata);
+
+        // Wait for transaction? The client returns a Task/Response object.
+        // The docs say: const result = await response.wait();
+        // We should probably wait here to return the result to the client.
+
+        console.log('[Relayer Proxy] Transaction submitted. Waiting for confirmation...');
+        const result = await response.wait();
+
+        console.log('[Relayer Proxy] Transaction confirmed:', result);
+
+        return NextResponse.json({
+            transactionHash: result?.transactionHash,
+            state: result?.state,
+            result: result
+        });
 
     } catch (error: any) {
-        console.error('[Relayer Proxy] Error:', error.response?.data || error.message);
+        console.error('[Relayer Proxy] Error:', error);
         return NextResponse.json(
-            { error: error.response?.data?.message || error.message || 'Relayer request failed' },
-            { status: error.response?.status || 500 }
+            { error: error.message || 'Relayer request failed' },
+            { status: 500 }
         );
     }
 }

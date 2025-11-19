@@ -18,7 +18,7 @@ export const DATA_API_URL: string = process.env.NEXT_PUBLIC_DATA_API_URL || 'htt
 
 // Polymarket Relayer URL
 // Per Polymarket docs: https://docs.polymarket.com/developers/builders/relayer-client
-export const POLYMARKET_RELAYER_URL: string = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer.polymarket.com';
+export const POLYMARKET_RELAYER_URL: string = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
 
 // Chain Configuration
 // Multi-chain support: Polygon (Polymarket), Ethereum, Base
