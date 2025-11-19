@@ -279,60 +279,41 @@ export function usePlacePrediction() {
           usdcTypeToUse,
         });
 
-        // OPTION 1: Gasless approval via Relayer (Server-Side Proxy)
-        // This avoids using the broken @polymarket/builder-relayer-client in the browser
-        console.log('🚀 Attempting gasless approval via Relayer Proxy...');
+        // OPTION 1: Gasless approval via Relayer (Server-Side SDK)
+        console.log('🚀 Attempting gasless approval via Relayer SDK...');
 
         try {
           if (!proxyWalletAddress) throw new Error('Proxy wallet not found');
 
-          // 1. Get Nonce from Safe Contract
-          // We need the nonce to sign the transaction correctly
-          // Safe 1.3.0 ABI for nonce
-          const nonce = await publicClient.readContract({
-            address: proxyWalletAddress,
-            abi: [{
-              inputs: [],
-              name: 'nonce',
-              outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-              stateMutability: 'view',
-              type: 'function'
-            }],
-            functionName: 'nonce',
-          }) as bigint;
-
-          console.log('Safe Nonce:', nonce.toString());
-
-          // 2. Construct Safe Transaction Data
-          // approve(spender, amount)
-          const erc20Interface = {
-            name: 'approve',
-            type: 'function',
-            inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
-            outputs: [{ type: 'bool' }]
-          } as const;
-
-          const data = encodeFunctionData({
-            abi: [erc20Interface],
-            functionName: 'approve',
-            args: [POLYMARKET_CLOB_ADDRESS, BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')]
-          });
-
-          // 3. Create SafeTransaction object (Relayer will handle execution)
+          // 1. Create approval transaction (simple SafeTransaction format)
           const approvalTransaction = {
             to: usdcToUse,
-            operation: 0, // Call operation
-            data: data,
+            operation: 0, // OperationType.Call
+            data: encodeFunctionData({
+              abi: [{
+                inputs: [
+                  { name: '_spender', type: 'address' },
+                  { name: '_value', type: 'uint256' }
+                ],
+                name: 'approve',
+                outputs: [{ name: '', type: 'bool' }],
+                stateMutability: 'nonpayable',
+                type: 'function'
+              }],
+              functionName: 'approve',
+              args: [POLYMARKET_CLOB_ADDRESS, BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')]
+            }),
             value: '0'
           };
 
-          // 4. Send to Relayer via our server proxy
+          // 2. Send to server - SDK handles all the complex stuff (nonce, signing, request building)
           const response = await fetch('/api/relay', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               transactions: [approvalTransaction],
-              metadata: 'Approve USDC for Polymarket CLOB'
+              metadata: 'Approve USDC for Polymarket CLOB',
+              userAddress: address
             })
           });
 
@@ -344,8 +325,7 @@ export function usePlacePrediction() {
           const result = await response.json();
           console.log('✅ Gasless approval submitted via Relayer:', result.transactionHash);
 
-          // Wait for transaction
-          // The result usually contains transactionHash immediately if successful
+          // Wait for transaction confirmation
           if (result.transactionHash) {
             const receipt = await publicClient.waitForTransactionReceipt({ hash: result.transactionHash });
             if (receipt.status !== 'success') throw new Error('Gasless transaction reverted');
