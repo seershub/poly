@@ -103,44 +103,7 @@ export async function initializeRelayerClient(walletClient: WalletClient): Promi
     // Get builder configuration
     const builderConfig = getBuilderConfig();
 
-    if (!builderConfig) {
-      console.warn('Builder config not available. Relayer features disabled.');
-      return null;
-    }
-
-    // DEBUG: Log the module structure to understand the import issue
-    // @ts-ignore
-    console.log('Relayer Module Import Debug:', {
-      RelayClient: RelayerModule.RelayClient,
-      typeofRelayClient: typeof RelayerModule.RelayClient,
-      // @ts-ignore
-      isConstructor: typeof RelayerModule.RelayClient === 'function' && !!RelayerModule.RelayClient.prototype && !!RelayerModule.RelayClient.prototype.constructor
-    });
-
-    // Handle potential import mismatch (ESM vs CommonJS)
-    // If RelayClient is not a constructor, try to find it in the module
-    // @ts-ignore
-    let ClientConstructor = RelayerModule.RelayClient;
-
-    if (!ClientConstructor) {
-      // @ts-ignore
-      if (RelayerModule.default) {
-        // @ts-ignore
-        ClientConstructor = RelayerModule.default.RelayClient || RelayerModule.default;
-      }
-    }
-
-    // @ts-ignore
-    if (typeof ClientConstructor !== 'function') {
-      console.error('Failed to resolve RelayClient constructor. Module content:', RelayerModule);
-      throw new Error('RelayClient is not a constructor');
-    }
-
-    // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
-    // IMPORTANT: The builderConfig must be passed as the 4th argument
-    // @ts-ignore
-    const client = new ClientConstructor(
-      RELAYER_URL,
+    RELAYER_URL,
       POLYGON_CHAIN_ID,
       signer,
       builderConfig
