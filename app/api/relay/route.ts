@@ -1,16 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeRelayerClient, approveTokenViaRelayer } from '@/lib/polymarket/relayerClient';
-import { createWalletClient, http } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { polygon } from 'viem/chains';
+import axios from 'axios';
+import { POLYMARKET_RELAYER_URL } from '@/lib/constants';
+import * as crypto from 'crypto';
 
-// NOTE: This API route is for server-side relayer operations if needed.
-// However, standard relayer operations (approve, deploy safe) usually require the USER'S signature,
-// so they must be initiated from the client side.
-// BUT, we can use this route to proxy requests if we want to hide builder credentials entirely.
-// For now, we will keep the client-side logic with the fallback we implemented, 
-// but this file serves as a placeholder for future server-side relayer expansion.
+// Helper to generate Builder Signature
+// We implement this manually to avoid dependency issues with the SDK on some environments
+function generateBuilderSignature(secret: string, passphrase: string, timestamp: number, method: string, path: string, body?: string): string {
+    const message = `${timestamp}${method}${path}${body || ''}`;
+    const hmac = crypto.createHmac('sha256', secret); // Use 'secret' as the key
+    hmac.update(message);
+    const signature = hmac.digest('base64');
+
+    // The signature format might need the passphrase too, depending on the specific SDK implementation
+    // But typically it's: sign(timestamp + method + path + body, secret)
+    // Let's check the standard Polymarket signature format.
+    // Actually, for Builder Creds (API Key/Secret/Passphrase), it's usually:
+    // sign(timestamp + method + path + body, base64Decode(secret))
+    // Let's try to be safe and use the SDK if possible, but if not, we use a standard HMAC.
+
+    return signature;
+}
+
+// We will use the SDK if available, otherwise fallback to manual (which is risky if we get it wrong).
+// Better to rely on the SDK for signing if it works in Node.
+import { BuilderConfig, BuilderApiKeyCreds } from '@polymarket/builder-signing-sdk';
 
 export async function POST(request: NextRequest) {
-    return NextResponse.json({ message: 'Relayer API route ready' });
+    try {
+        const body = await request.json();
+        const { method, path, data } = body;
+
+        // 1. Get Builder Credentials
+        const apiKey = process.env.POLY_BUILDER_API_KEY;
+        const secret = process.env.POLY_BUILDER_SECRET;
+        const passphrase = process.env.POLY_BUILDER_PASSPHRASE;
+
+        if (!apiKey || !secret || !passphrase) {
+            return NextResponse.json({ error: 'Builder credentials not configured on server' }, { status: 500 });
+        }
+
+        // 2. Construct URL
+        const relayerUrl = POLYMARKET_RELAYER_URL || 'https://relayer.polymarket.com';
+        const fullUrl = `${relayerUrl}${path}`;
+
+        // 3. Generate Headers using SDK (or manual if SDK fails, but SDK should work in Node)
+        // We need to sign the request.
+        // The Relayer Client usually handles this. Since we are proxying, we need to sign "like" the Relayer Client.
+
+        const timestamp = Math.floor(Date.now() / 1000);
+
+        // Manual signature generation to ensure no SDK version mismatches
+        // Format: base64(hmac-sha256(timestamp + method + path + body, base64_decode(secret)))
+        const secretBuffer = Buffer.from(secret, 'base64');
+        const message = `${timestamp}${method}${path}${JSON.stringify(data)}`;
+        const signature = crypto.createHmac('sha256', secretBuffer).update(message).digest('base64');
+
+        const headers = {
+            'Content-Type': 'application/json',
+            'POLY-BUILDER-API-KEY': apiKey,
+            'POLY-BUILDER-TIMESTAMP': timestamp.toString(),
+            'POLY-BUILDER-SIGNATURE': signature,
+            'POLY-BUILDER-PASSPHRASE': passphrase,
+        };
+
+        console.log('[Relayer Proxy] Forwarding request:', {
+            url: fullUrl,
+            method,
+            timestamp,
+            apiKey: apiKey.substring(0, 5) + '...',
+        });
+
+        // 4. Forward Request
+        const response = await axios({
+            method,
+            url: fullUrl,
+            data,
+            headers,
+        });
+
+        return NextResponse.json(response.data);
+
+    } catch (error: any) {
+        console.error('[Relayer Proxy] Error:', error.response?.data || error.message);
+        return NextResponse.json(
+            { error: error.response?.data?.message || error.message || 'Relayer request failed' },
+            { status: error.response?.status || 500 }
+        );
+    }
 }

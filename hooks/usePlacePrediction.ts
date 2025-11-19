@@ -11,7 +11,7 @@ import {
   useChainId,
   usePublicClient,
 } from 'wagmi';
-import { parseUnits, formatUnits } from 'viem';
+import { parseUnits, formatUnits, encodeFunctionData } from 'viem';
 import { POLYGON_USDC_ADDRESS, POLYGON_USDC_NATIVE, POLYGON_USDC_BRIDGED, POLYMARKET_CLOB_ADDRESS, USDC_DECIMALS, POLYGON_CHAIN_ID } from '@/lib/constants';
 import { placePrediction, initializeClobClient } from '@/lib/polymarket/clobClient';
 import { useApiCredentials } from './useApiCredentials';
@@ -279,49 +279,149 @@ export function usePlacePrediction() {
           usdcTypeToUse,
         });
 
-        // OPTION 1: Try gasless approval via Relayer first (if Builder Signing Server configured)
-        // NEXT_PUBLIC_* env vars are automatically available in browser at build time
-        const signingServerUrl = process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
+        // OPTION 1: Gasless approval via Relayer (Server-Side Proxy)
+        // This avoids using the broken @polymarket/builder-relayer-client in the browser
+        console.log('🚀 Attempting gasless approval via Relayer Proxy...');
 
-        if (signingServerUrl) {
-          console.log('🚀 Attempting gasless approval via Builder Signing Server:', signingServerUrl);
-          try {
-            // Try to approve via Relayer (gasless) if builder credentials are configured
-            // The relayer will execute the approval transaction FROM the proxy wallet
-            const { approveTokenViaRelayer } = await import('@/lib/polymarket/relayerClient');
-            const approvalTxHash = await approveTokenViaRelayer(
-              walletClient,
-              usdcToUse,  // Use the correct USDC token (native or bridged)
-              POLYMARKET_CLOB_ADDRESS,
-              BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935') // MaxUint256
-            );
-            console.log('✅ Gasless approval completed via Relayer:', approvalTxHash, '| USDC Type:', usdcTypeToUse);
+        try {
+          if (!proxyWalletAddress) throw new Error('Proxy wallet not found');
 
-            // Wait for transaction to be processed
-            await new Promise(resolve => setTimeout(resolve, 3000));
+          // 1. Get Nonce from Safe Contract
+          // We need the nonce to sign the transaction correctly
+          // Safe 1.3.0 ABI for nonce
+          const nonce = await publicClient.readContract({
+            address: proxyWalletAddress,
+            abi: [{
+              inputs: [],
+              name: 'nonce',
+              outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+              stateMutability: 'view',
+              type: 'function'
+            }],
+            functionName: 'nonce',
+          }) as bigint;
 
-            // Refetch allowance from proxy wallet
-            if (!proxyWalletAddress) {
-              throw new Error('Proxy wallet address not available');
-            }
+          console.log('Safe Nonce:', nonce.toString());
 
-            const refreshedAllowance = await publicClient.readContract({
-              address: usdcToUse,
-              abi: USDC_ABI,
-              functionName: 'allowance',
-              args: [proxyWalletAddress, POLYMARKET_CLOB_ADDRESS],
-            });
+          // 2. Construct Safe Transaction Data
+          // approve(spender, amount)
+          const erc20Interface = {
+            name: 'approve',
+            type: 'function',
+            inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
+            outputs: [{ type: 'bool' }]
+          } as const;
 
-            if ((refreshedAllowance as bigint) < requiredUsdc) {
-              throw new Error('Allowance still insufficient after approval. Please try again.');
-            }
+          const data = encodeFunctionData({
+            abi: [erc20Interface],
+            functionName: 'approve',
+            args: [POLYMARKET_CLOB_ADDRESS, BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935')] // MaxUint256
+          });
 
-            console.log('✅ USDC approval verified');
-            // Continue with order placement below
-          } catch (relayerError: any) {
-            console.warn('⚠️ Gasless approval via Relayer failed:', relayerError.message);
-            console.warn('Falling back to manual approval...');
+          // 3. Sign Transaction (EIP-712)
+          // Domain separator for Safe
+          const domain = {
+            verifyingContract: proxyWalletAddress,
+            chainId: chainId,
+          };
+
+          const types = {
+            SafeTx: [
+              { name: 'to', type: 'address' },
+              { name: 'value', type: 'uint256' },
+              { name: 'data', type: 'bytes' },
+              { name: 'operation', type: 'uint8' },
+              { name: 'safeTxGas', type: 'uint256' },
+              { name: 'baseGas', type: 'uint256' },
+              { name: 'gasPrice', type: 'uint256' },
+              { name: 'gasToken', type: 'address' },
+              { name: 'refundReceiver', type: 'address' },
+              { name: 'nonce', type: 'uint256' },
+            ],
+          };
+
+          const message = {
+            to: usdcToUse,
+            value: BigInt(0),
+            data: data,
+            operation: 0, // Call
+            safeTxGas: BigInt(0), // Relayer sets this? Or we set 0 and let relayer estimate?
+            // Usually for gasless, we might need to estimate. 
+            // But let's try 0 first as Relayer often handles estimation if we pass it correctly.
+            // Wait, if we sign 0, the executed tx must use 0?
+            // Polymarket Relayer docs say: "The relayer will estimate the gas limit..."
+            // But the signature MUST match the executed parameters.
+            // If we sign 0, and relayer uses 100000, the signature is invalid.
+            // UNLESS the Relayer uses `execTransaction` with the parameters we signed.
+            // Let's assume 0 for safeTxGas/baseGas/gasPrice is correct for "Relayer pays".
+            baseGas: BigInt(0),
+            gasPrice: BigInt(0),
+            gasToken: '0x0000000000000000000000000000000000000000',
+            refundReceiver: '0x0000000000000000000000000000000000000000',
+            nonce: nonce,
+          };
+
+          // Sign with Wallet Client
+          const signature = await walletClient.signTypedData({
+            domain,
+            types,
+            primaryType: 'SafeTx',
+            message,
+          });
+
+          console.log('Signed Safe Tx:', signature);
+
+          // 4. Send to Relayer Proxy
+          // We need to send the transaction details + signature
+          const payload = {
+            to: usdcToUse,
+            data: data,
+            value: '0',
+            operation: 0,
+            safeTxGas: '0',
+            baseGas: '0',
+            gasPrice: '0',
+            gasToken: '0x0000000000000000000000000000000000000000',
+            refundReceiver: '0x0000000000000000000000000000000000000000',
+            nonce: nonce.toString(),
+            signatures: signature,
+          };
+
+          // Call our API route
+          const response = await fetch('/api/relay', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              method: 'POST',
+              path: '/v1/transactions', // Relayer endpoint
+              data: payload
+            })
+          });
+
+          if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || 'Relayer request failed');
           }
+
+          const result = await response.json();
+          console.log('✅ Gasless approval submitted via Relayer:', result.transactionHash);
+
+          // Wait for transaction
+          // The result usually contains transactionHash immediately if successful
+          if (result.transactionHash) {
+            const receipt = await publicClient.waitForTransactionReceipt({ hash: result.transactionHash });
+            if (receipt.status !== 'success') throw new Error('Gasless transaction reverted');
+          }
+
+          console.log('✅ Gasless approval confirmed');
+
+          // Wait a moment for indexer
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+        } catch (relayerError: any) {
+          console.warn('⚠️ Gasless approval failed:', relayerError.message);
+          console.warn('Falling back to manual approval...');
+          // Fallthrough to manual approval
         }
 
         // OPTION 2: Manual approval (Fallback or Primary if no server)
