@@ -1,31 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ethers } from 'ethers';
-import { BuilderApiKeyCreds, BuilderConfig } from '@polymarket/builder-signing-sdk';
 
-// CRITICAL: Use dynamic require to handle CJS/ESM compatibility
-const getRelayClient = () => {
-    try {
-        // Try to require the module
-        const relayerModule = require('@polymarket/builder-relayer-client');
-
-        // Try different export patterns
-        const RelayClient =
-            relayerModule.RelayClient ||           // Named export
-            relayerModule.default?.RelayClient ||  // Default with named property
-            relayerModule.default ||               // Direct default
-            relayerModule;                         // Module itself
-
-        if (typeof RelayClient !== 'function') {
-            throw new Error('RelayClient constructor not found in module');
-        }
-
-        return RelayClient;
-    } catch (error: any) {
-        console.error('Failed to load RelayClient:', error.message);
-        throw error;
-    }
-};
-
+// CRITICAL: Dynamic import to avoid build-time issues
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
@@ -37,27 +13,26 @@ export async function POST(request: NextRequest) {
         const passphrase = process.env.POLY_BUILDER_PASSPHRASE;
 
         if (!apiKey || !secret || !passphrase) {
-            return NextResponse.json({ error: 'Builder credentials not configured on server' }, { status: 500 });
+            return NextResponse.json({ error: 'Builder credentials not configured' }, { status: 500 });
         }
 
-        // 2. Create a server-side wallet
+        // 2. Dynamic import of SDK modules
+        const { RelayClient } = await import('@polymarket/builder-relayer-client');
+        const { BuilderConfig } = await import('@polymarket/builder-signing-sdk');
+
+        // 3. Create server-side wallet
         const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
         const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
         const serverWallet = ethers.Wallet.createRandom().connect(provider);
 
-        // 3. Initialize Builder Config
-        const builderCreds: BuilderApiKeyCreds = {
-            key: apiKey,
-            secret: secret,
-            passphrase: passphrase,
-        };
-
+        // 4. Initialize Builder Config
         const builderConfig = new BuilderConfig({
-            localBuilderCreds: builderCreds
+            localBuilderCreds: {
+                key: apiKey,
+                secret: secret,
+                passphrase: passphrase,
+            }
         });
-
-        // 4. Get RelayClient constructor
-        const RelayClient = getRelayClient();
 
         // 5. Initialize Relay Client
         const relayerUrl = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
@@ -65,19 +40,19 @@ export async function POST(request: NextRequest) {
 
         const client = new RelayClient(relayerUrl, chainId, serverWallet, builderConfig);
 
-        console.log('[Relayer Proxy] Executing transactions:', {
+        console.log('[Relayer] Executing transactions:', {
             transactionCount: transactions?.length,
             metadata,
             userAddress
         });
 
         // 6. Execute transactions
-        const response = await client.execute(transactions, metadata || 'Transaction via Relayer');
+        const response = await client.execute(transactions, metadata || 'Gasless transaction');
 
-        console.log('[Relayer Proxy] Waiting for confirmation...');
+        console.log('[Relayer] Waiting for confirmation...');
         const result = await response.wait();
 
-        console.log('[Relayer Proxy] Success:', result);
+        console.log('[Relayer] Success:', result);
 
         return NextResponse.json({
             transactionID: result?.transactionID,
@@ -87,7 +62,7 @@ export async function POST(request: NextRequest) {
         });
 
     } catch (error: any) {
-        console.error('[Relayer Proxy] Error:', {
+        console.error('[Relayer] Error:', {
             message: error.message,
             stack: error.stack
         });
