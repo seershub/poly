@@ -175,3 +175,43 @@ export async function fetchKalshiMarket(ticker: string): Promise<ParsedMatch | n
     return null;
   }
 }
+
+/**
+ * Place an order on Kalshi
+ */
+export async function createKalshiOrder(
+  ticker: string,
+  side: 'yes' | 'no',
+  count: number,
+  price?: number // Optional for market orders, required for limit
+): Promise<any> {
+  console.log('=== Kalshi API: Placing Order ===', { ticker, side, count });
+
+  try {
+    const orderId = crypto.randomUUID();
+
+    // Kalshi API v2 Order Payload
+    const payload = {
+      ticker,
+      client_order_id: orderId,
+      side: side,
+      action: 'buy',
+      count: count,
+      type: 'market', // Default to market order for simplicity
+      // price: price // Add for limit orders
+    };
+
+    const response = await kalshiRequest<any>('POST', '/portfolio/orders', payload);
+    console.log('[Kalshi API] ✅ Order placed successfully:', response);
+    return response;
+
+  } catch (error: any) {
+    console.error('=== Kalshi API Order Error ===');
+    console.error('[Kalshi API] ❌ Error:', error.message);
+    if (error.response) {
+      console.error('[Kalshi API] Status:', error.response.status);
+      console.error('[Kalshi API] Data:', error.response.data);
+    }
+    throw error;
+  }
+}

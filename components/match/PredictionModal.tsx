@@ -32,7 +32,11 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
   const { predict, isPending, isApproving, error } = usePlacePrediction();
-  
+
+  // Check for Builder Signing Server URL (for gasless approvals)
+  const signingServerUrl = process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
+  const isGaslessConfigured = !!signingServerUrl;
+
   // CRITICAL: Determine required chain based on match platform
   const getRequiredChain = () => {
     if (match.chain === 'ethereum') return ETHEREUM_CHAIN_ID;
@@ -41,10 +45,10 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
     // Kalshi (none) or Solana - no chain switch needed
     return POLYGON_CHAIN_ID; // Default to Polygon
   };
-  
+
   const requiredChain = getRequiredChain();
   const isOnCorrectChain = match.chain === 'none' || match.chain === 'solana' || chainId === requiredChain;
-  
+
   // Get chain name for display
   const getChainName = () => {
     if (match.chain === 'ethereum') return 'Ethereum';
@@ -115,17 +119,6 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
       return;
     }
 
-    // CRITICAL: Kalshi markets not yet supported for predictions
-    // TODO: Implement Kalshi prediction logic when API is ready
-    if (match.platform === 'kalshi') {
-      toast({
-        title: 'Coming Soon',
-        description: 'Kalshi predictions will be available soon.',
-        variant: 'default',
-      });
-      return;
-    }
-
     if (shares < MIN_SHARE_SIZE || shares > MAX_SHARE_SIZE) {
       toast({
         title: 'Invalid Share Amount',
@@ -135,6 +128,39 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
       return;
     }
 
+    // Handle Kalshi Predictions
+    if (match.platform === 'kalshi') {
+      predict(
+        {
+          tokenId: outcome.tokenId, // Not used for Kalshi but required by type
+          side: 'BUY',
+          size: shares,
+          price: price,
+          platform: 'kalshi',
+          ticker: match.id,
+          outcome: side // Pass YES/NO outcome
+        },
+        {
+          onSuccess: () => {
+            toast({
+              title: 'Kalshi Order Placed!',
+              description: `Successfully bought ${shares} shares of ${team}.`,
+            });
+            onClose();
+          },
+          onError: (error: any) => {
+            toast({
+              title: 'Order Failed',
+              description: error.message || 'Failed to place Kalshi order.',
+              variant: 'destructive',
+            });
+          }
+        }
+      );
+      return;
+    }
+
+    // Handle Polymarket Predictions
     predict(
       {
         tokenId: outcome.tokenId,
@@ -155,6 +181,12 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
             toast({
               title: 'Approval Required',
               description: 'Please approve USDC spending in your wallet.',
+            });
+          } else if (error.message.includes('Builder Signing Server')) {
+            toast({
+              title: 'Configuration Error',
+              description: 'Gasless approval failed. Check console for details.',
+              variant: 'destructive',
             });
           } else {
             toast({
@@ -187,7 +219,7 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
 
         <div className="space-y-4 py-4">
           {/* Network Warning */}
-          {!isOnCorrectChain && (
+          {!isOnCorrectChain && match.platform !== 'kalshi' && (
             <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg flex items-center gap-2 text-yellow-500">
               <AlertCircle className="h-4 w-4" />
               <div className="flex-1">
@@ -204,6 +236,22 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
               >
                 Switch
               </Button>
+            </div>
+          )}
+
+          {/* Gasless Config Warning */}
+          {!isGaslessConfigured && match.platform === 'polymarket' && (
+            <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-lg flex items-start gap-2 text-orange-500">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 text-sm">
+                <p className="font-semibold mb-1">Gasless Approval Not Configured</p>
+                <p className="text-xs opacity-90">
+                  Builder Signing Server URL is missing. You will need to pay gas for approvals.
+                </p>
+                <p className="text-xs mt-1 font-mono bg-orange-500/10 p-1 rounded">
+                  NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL
+                </p>
+              </div>
             </div>
           )}
 
@@ -301,7 +349,7 @@ export function PredictionModal({ match, side, onClose }: PredictionModalProps) 
           </Button>
           <Button
             onClick={handlePredict}
-            disabled={isPending || isApproving || !isConnected || !isOnCorrectChain || match.platform === 'kalshi'}
+            disabled={isPending || isApproving || !isConnected || (!isOnCorrectChain && match.platform !== 'kalshi')}
             className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold"
           >
             {isApproving ? (

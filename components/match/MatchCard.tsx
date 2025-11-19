@@ -21,68 +21,103 @@ export function MatchCard({ match }: MatchCardProps) {
     setShowPredictionModal(true);
   };
 
+  // Helper to get a team logo URL (using a placeholder service for now)
+  // In a real app, you'd map team names to specific assets or use a sports API
+  const getTeamLogoUrl = (teamName: string) => {
+    // Simple hash to get consistent colors/images if needed, but for now using UI Avatars
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(teamName)}&background=random&color=fff&size=64&font-size=0.4`;
+  };
+
   return (
     <>
-      <div className="bg-gradient-to-br from-card to-card/80 border border-border/50 rounded-xl p-5 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 group">
-        {/* Header: League and Date */}
-        <div className="flex items-center justify-between mb-4 text-xs">
-          <span className="font-semibold text-primary bg-primary/10 px-2 py-1 rounded">{match.league}</span>
-          <span className="flex items-center gap-1 text-muted-foreground">
+      <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-xl overflow-hidden hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 group flex flex-col h-full">
+
+        {/* Header: League & Date */}
+        <div className="px-4 py-3 border-b border-border/30 bg-muted/20 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            {match.platform === 'kalshi' ? (
+              <span className="bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider">KALSHI</span>
+            ) : (
+              <span className="bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider">POLY</span>
+            )}
+            <span className="font-medium text-muted-foreground">{match.league}</span>
+          </div>
+          <span className="flex items-center gap-1 text-muted-foreground/80">
             <Calendar className="h-3 w-3" />
             {formatShortDate(match.matchDate)}
           </span>
         </div>
 
-        {/* Teams */}
-        <Link href={`/matches/${match.slug}`} className="block mb-4">
-          <div className="space-y-2.5">
+        {/* Match Content */}
+        <Link href={`/matches/${match.slug}`} className="flex-1 p-4 flex flex-col gap-4">
+
+          {/* Teams Row */}
+          <div className="flex items-center justify-between gap-4">
             {/* Home Team */}
-            <div className="flex items-center justify-between p-3 bg-gradient-to-r from-green-500/10 to-emerald-500/5 border border-green-500/20 rounded-lg hover:from-green-500/20 hover:to-emerald-500/10 transition-all group-hover:border-green-500/40">
-              <span className="font-bold text-sm">{match.homeTeam}</span>
-              <span className="text-lg font-bold text-green-500 bg-green-500/10 px-3 py-1 rounded">
-                {formatPriceAsCents(match.outcomes.YES.price)}
+            <div className="flex flex-col items-center gap-2 flex-1 text-center">
+              <div className="w-12 h-12 rounded-full bg-secondary/50 p-1 ring-1 ring-border/50 group-hover:ring-primary/30 transition-all">
+                <img
+                  src={getTeamLogoUrl(match.homeTeam)}
+                  alt={match.homeTeam}
+                  className="w-full h-full rounded-full object-cover"
+                />
+              </div>
+              <span className="text-sm font-bold leading-tight line-clamp-2 h-10 flex items-center justify-center">
+                {match.homeTeam}
               </span>
+            </div>
+
+            {/* VS / Time */}
+            <div className="flex flex-col items-center justify-center gap-1">
+              <span className="text-xs font-bold text-muted-foreground/50">VS</span>
             </div>
 
             {/* Away Team */}
-            <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-500/10 to-cyan-500/5 border border-blue-500/20 rounded-lg hover:from-blue-500/20 hover:to-cyan-500/10 transition-all group-hover:border-blue-500/40">
-              <span className="font-bold text-sm">{match.awayTeam}</span>
-              <span className="text-lg font-bold text-blue-500 bg-blue-500/10 px-3 py-1 rounded">
-                {formatPriceAsCents(match.outcomes.NO.price)}
+            <div className="flex flex-col items-center gap-2 flex-1 text-center">
+              <div className="w-12 h-12 rounded-full bg-secondary/50 p-1 ring-1 ring-border/50 group-hover:ring-primary/30 transition-all">
+                <img
+                  src={getTeamLogoUrl(match.awayTeam)}
+                  alt={match.awayTeam}
+                  className="w-full h-full rounded-full object-cover"
+                />
+              </div>
+              <span className="text-sm font-bold leading-tight line-clamp-2 h-10 flex items-center justify-center">
+                {match.awayTeam}
               </span>
             </div>
           </div>
+
+          {/* Odds Display */}
+          <div className="grid grid-cols-2 gap-3 mt-auto">
+            <div className="flex flex-col gap-1 p-2 rounded-lg bg-green-500/5 border border-green-500/10 group-hover:border-green-500/30 transition-all text-center">
+              <span className="text-[10px] font-semibold text-green-500/70 uppercase tracking-wider">Home Win</span>
+              <span className="text-xl font-bold text-green-500">{formatPriceAsCents(match.outcomes.YES.price)}</span>
+            </div>
+            <div className="flex flex-col gap-1 p-2 rounded-lg bg-blue-500/5 border border-blue-500/10 group-hover:border-blue-500/30 transition-all text-center">
+              <span className="text-[10px] font-semibold text-blue-500/70 uppercase tracking-wider">Away Win</span>
+              <span className="text-xl font-bold text-blue-500">{formatPriceAsCents(match.outcomes.NO.price)}</span>
+            </div>
+          </div>
+
         </Link>
 
-        {/* Stats */}
-        <div className="flex items-center justify-between mb-4 p-2 bg-secondary/30 rounded-lg text-xs">
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <TrendingUp className="h-3.5 w-3.5 text-primary" />
-            <span className="font-medium">Vol: <span className="text-foreground">{formatCurrency(match.volume, 0)}</span></span>
-          </span>
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <Droplets className="h-3.5 w-3.5 text-primary" />
-            <span className="font-medium">Liq: <span className="text-foreground">{formatCurrency(match.liquidity, 0)}</span></span>
-          </span>
-        </div>
-
-        {/* Prediction Buttons */}
-        <div className="grid grid-cols-2 gap-2.5">
+        {/* Footer Actions */}
+        <div className="p-3 border-t border-border/30 bg-muted/10 grid grid-cols-2 gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={() => handlePredict('YES')}
-            className="bg-gradient-to-r from-green-500/20 to-emerald-500/10 border-green-500/40 hover:from-green-500/30 hover:to-emerald-500/20 hover:border-green-500/60 text-green-400 font-semibold transition-all"
+            className="h-9 text-xs font-semibold bg-background hover:bg-green-500 hover:text-white hover:border-green-500 transition-colors"
           >
-            {match.homeTeam}
+            Bet {match.homeTeam}
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => handlePredict('NO')}
-            className="bg-gradient-to-r from-blue-500/20 to-cyan-500/10 border-blue-500/40 hover:from-blue-500/30 hover:to-cyan-500/20 hover:border-blue-500/60 text-blue-400 font-semibold transition-all"
+            className="h-9 text-xs font-semibold bg-background hover:bg-blue-500 hover:text-white hover:border-blue-500 transition-colors"
           >
-            {match.awayTeam}
+            Bet {match.awayTeam}
           </Button>
         </div>
       </div>
