@@ -188,6 +188,18 @@ export async function placePrediction(params: {
     // Polymarket docs say: "You can use the L2 CLOB API with an API Key... or by signing every request with your L2 wallet."
     // If we have API creds, we should use them for posting. But for *creating* (signing) the order, we need a signer.
 
+    // Per Polymarket docs: Create UserOrder object
+    // tokenID: The condition token ID for the market outcome
+    // price: Limit price (0-1 range, e.g., 0.65 = $0.65 per share)
+    // size: Number of shares
+    // side: BUY or SELL
+    const userOrder = {
+      tokenID: tokenId,
+      price,
+      size,
+      side: side === 'BUY' ? Side.BUY : Side.SELL,
+    };
+
     // Let's create a client JUST for signing the order.
     const signingClient = new ClobClient(
       CLOB_API_URL,
