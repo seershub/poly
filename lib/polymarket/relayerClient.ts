@@ -123,6 +123,7 @@ export async function initializeRelayerClient(walletClient: WalletClient): Promi
     }
 
     // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
+    // IMPORTANT: The builderConfig must be passed as the 4th argument
     const client = new RelayClient(
       RELAYER_URL,
       POLYGON_CHAIN_ID,
@@ -130,7 +131,12 @@ export async function initializeRelayerClient(walletClient: WalletClient): Promi
       builderConfig
     );
 
-    console.log('Relayer client initialized successfully');
+    console.log('Relayer client initialized successfully with config:', {
+      hasRemote: !!builderConfig.remoteBuilderConfig,
+      remoteUrl: builderConfig.remoteBuilderConfig?.url,
+      hasLocal: !!builderConfig.localBuilderCreds
+    });
+
     return client;
   } catch (error) {
     console.error('Error initializing relayer client:', error);
@@ -156,7 +162,7 @@ export async function deploySafeWalletViaRelayer(
 
   try {
     console.log('Deploying Safe Wallet via Polymarket Relayer...');
-    
+
     // Per Polymarket docs: deploySafe() deploys a Safe wallet, Polymarket pays gas
     // https://docs.polymarket.com/developers/builders/relayer-client#deploying-safe-wallets
     const response = await relayerClient.deploySafe();
