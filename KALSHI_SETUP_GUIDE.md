@@ -41,11 +41,10 @@ Add to your `.env.local` file:
 ```bash
 # Kalshi API Configuration
 NEXT_PUBLIC_KALSHI_API_URL=https://api.kalshi.com/trade-api/v2
-KALSHI_EMAIL=your_kalshi_email@example.com
-KALSHI_PASSWORD=your_kalshi_password
+KALSHI_API_KEY=your_kalshi_api_key
 ```
 
-**IMPORTANT:** Replace `your_kalshi_email@example.com` and `your_kalshi_password` with YOUR actual Kalshi account credentials.
+**IMPORTANT:** Replace `your_kalshi_api_key` with YOUR actual Kalshi API key.
 
 ### For Vercel Deployment
 
@@ -57,13 +56,11 @@ KALSHI_PASSWORD=your_kalshi_password
 | Variable Name | Value | Environment |
 |--------------|-------|-------------|
 | `NEXT_PUBLIC_KALSHI_API_URL` | `https://api.kalshi.com/trade-api/v2` | Production, Preview, Development |
-| `KALSHI_EMAIL` | Your Kalshi email | Production, Preview, Development |
-| `KALSHI_PASSWORD` | Your Kalshi password | Production, Preview, Development |
+| `KALSHI_API_KEY` | Your Kalshi API Key | Production, Preview, Development |
 
 **Security Note:**
-- ✅ `KALSHI_EMAIL` and `KALSHI_PASSWORD` are server-side only (no `NEXT_PUBLIC_` prefix)
+- ✅ `KALSHI_API_KEY` is server-side only (no `NEXT_PUBLIC_` prefix)
 - ✅ These credentials are never exposed to the browser
-- ✅ Token is generated server-side and cached for 25 minutes
 
 ---
 
