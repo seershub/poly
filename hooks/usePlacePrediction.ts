@@ -380,13 +380,14 @@ export function usePlacePrediction() {
           };
 
           // Call our API route
-          // We send the transactions array to the SDK proxy
+          // We use the manual proxy to forward the signed transaction
           const response = await fetch('/api/relay', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              transactions: [payload],
-              metadata: 'Approve USDC for Polymarket CLOB'
+              method: 'POST',
+              path: '/submit',
+              data: payload // The signed Safe transaction
             })
           });
 
