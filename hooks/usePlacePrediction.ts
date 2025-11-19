@@ -320,30 +320,38 @@ export function usePlacePrediction() {
             // Continue with order placement below
           } catch (relayerError: any) {
             console.warn('⚠️ Gasless approval via Relayer failed:', relayerError.message);
-            console.warn('Will attempt manual approval as fallback...');
-
-            // Fall through to OPTION 2 (manual approval)
-            throw new Error(
-              `Gasless approval failed. To enable gasless approvals:\n` +
-              `1. Set up Builder Signing Server (see BUILDER_SIGNING_SERVER_SETUP.md)\n` +
-              `2. Add NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL to .env.local\n\n` +
-              `Current error: ${relayerError.message}`
-            );
+            console.warn('Falling back to manual approval...');
           }
-        } else {
-          // OPTION 2: Manual approval (requires gas payment)
-          console.warn('⚠️ Builder Signing Server not configured. Manual approval required.');
-          console.warn('User will need to approve USDC spending and pay gas fees.');
-          console.warn('To enable gasless approvals, set up Builder Signing Server (see BUILDER_SIGNING_SERVER_SETUP.md)');
+        }
 
-          throw new Error(
-            `USDC approval required. Builder Signing Server not configured for gasless approvals.\n\n` +
-            `To enable gasless (free) approvals:\n` +
-            `1. Follow the guide in BUILDER_SIGNING_SERVER_SETUP.md\n` +
-            `2. Start the builder signing server (5 minutes)\n` +
-            `3. Add NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL to .env.local\n\n` +
-            `Without Builder Signing Server, you would need to manually approve USDC from your proxy wallet, which requires gas payment.`
-          );
+        // OPTION 2: Manual approval (Fallback or Primary if no server)
+        console.log('Initiating manual USDC approval...');
+
+        try {
+          approveUsdc({
+            address: usdcToUse,
+            abi: USDC_ABI,
+            functionName: 'approve',
+            args: [POLYMARKET_CLOB_ADDRESS, BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935')], // MaxUint256
+          });
+
+          // We need to wait for the approval to confirm before proceeding
+          // Since useWriteContract doesn't return a Promise that resolves on confirmation,
+          // we rely on the UI to handle the 'isApproving' state and the user re-clicking 'Predict'
+          // OR we throw a special error to stop execution but keep the UI in 'Approving' state.
+
+          // However, the current flow expects this function to complete.
+          // Since we can't easily await the hook's state change here without refactoring to an effect,
+          // we will throw a specific error that the UI can interpret as "Approval Initiated".
+
+          throw new Error('Approval transaction initiated. Please confirm in your wallet and wait for confirmation.');
+
+        } catch (err: any) {
+          if (err.message.includes('Approval transaction initiated')) {
+            throw err;
+          }
+          console.error('Manual approval failed:', err);
+          throw new Error('Failed to initiate approval transaction. Please try again.');
         }
       }
 
