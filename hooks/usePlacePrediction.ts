@@ -380,13 +380,13 @@ export function usePlacePrediction() {
           };
 
           // Call our API route
+          // We send the transactions array to the SDK proxy
           const response = await fetch('/api/relay', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              method: 'POST',
-              path: '/submit', // Probe confirmed /submit exists (401 vs 404/405)
-              data: payload
+              transactions: [payload],
+              metadata: 'Approve USDC for Polymarket CLOB'
             })
           });
 

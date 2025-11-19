@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import axios from 'axios';
-import { POLYMARKET_RELAYER_URL } from '@/lib/constants';
-import * as crypto from 'crypto';
+import { ethers } from 'ethers';
+import { RelayClient } from '@polymarket/builder-relayer-client';
+import { BuilderConfig } from '@polymarket/builder-signing-sdk';
+import { POLYMARKET_RELAYER_URL, POLYGON_CHAIN_ID } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { method, path, data } = body;
+        const { transactions, metadata } = body;
 
         // 1. Get Builder Credentials
         const apiKey = process.env.POLY_BUILDER_API_KEY;
@@ -17,52 +18,49 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Builder credentials not configured on server' }, { status: 500 });
         }
 
-        // 2. Construct URL
-        // Use the V2 URL from constants, ensure no trailing slash
-        const relayerUrl = (POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com').replace(/\/$/, '');
-        // Ensure path starts with /
-        const cleanPath = path.startsWith('/') ? path : `/${path}`;
-        const fullUrl = `${relayerUrl}${cleanPath}`;
+        // 2. Initialize Provider and Wallet
+        const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
+        const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+        const wallet = ethers.Wallet.createRandom().connect(provider);
 
-        // 3. Generate Headers for Builder Authentication
-        const timestamp = Math.floor(Date.now() / 1000);
-
-        // Manual signature generation
-        // Format: base64(hmac-sha256(timestamp + method + path + body, base64_decode(secret)))
-        const secretBuffer = Buffer.from(secret, 'base64');
-        const message = `${timestamp}${method}${cleanPath}${JSON.stringify(data)}`;
-        const signature = crypto.createHmac('sha256', secretBuffer).update(message).digest('base64');
-
-        const headers = {
-            'Content-Type': 'application/json',
-            'POLY-BUILDER-API-KEY': apiKey,
-            'POLY-BUILDER-TIMESTAMP': timestamp.toString(),
-            'POLY-BUILDER-SIGNATURE': signature,
-            'POLY-BUILDER-PASSPHRASE': passphrase,
-        };
-
-        console.log('[Relayer Proxy] Forwarding request:', {
-            url: fullUrl,
-            method,
-            timestamp,
-            apiKey: apiKey.substring(0, 5) + '...',
+        // 3. Initialize Relay Client
+        const builderConfig = new BuilderConfig({
+            localBuilderCreds: {
+                key: apiKey,
+                secret: secret,
+                passphrase: passphrase,
+            }
         });
 
-        // 4. Forward Request
-        const response = await axios({
-            method,
-            url: fullUrl,
-            data,
-            headers,
+        const relayerUrl = POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
+        const client = new RelayClient(relayerUrl, POLYGON_CHAIN_ID, wallet, builderConfig);
+
+        console.log('[Relayer Proxy] Executing transactions via SDK:', {
+            count: transactions.length,
+            metadata
         });
 
-        return NextResponse.json(response.data);
+        // 4. Execute Transactions
+        // We use 'execute' which should exist on the client
+        // We pass the transactions array which should contain the User's signature in the 'signatures' field
+        const response = await client.execute(transactions, metadata);
+
+        console.log('[Relayer Proxy] Transaction submitted. Waiting for confirmation...');
+        const result = await response.wait();
+
+        console.log('[Relayer Proxy] Transaction confirmed:', result);
+
+        return NextResponse.json({
+            transactionHash: result?.transactionHash,
+            state: result?.state,
+            result: result
+        });
 
     } catch (error: any) {
-        console.error('[Relayer Proxy] Error:', error.response?.data || error.message);
+        console.error('[Relayer Proxy] Error:', error);
         return NextResponse.json(
-            { error: error.response?.data?.message || error.message || 'Relayer request failed' },
-            { status: error.response?.status || 500 }
+            { error: error.message || 'Relayer request failed' },
+            { status: 500 }
         );
     }
 }
