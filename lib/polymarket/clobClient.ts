@@ -154,21 +154,49 @@ export async function placePrediction(params: {
     // Convert wagmi WalletClient to ethers Signer (required for order signing)
     const signer = walletClientToSigner(walletClient);
 
-    // Per Polymarket docs: Create UserOrder object
-    // tokenID: The condition token ID for the market outcome
-    // price: Limit price (0-1 range, e.g., 0.65 = $0.65 per share)
-    // size: Number of shares
-    // side: BUY or SELL
-    const userOrder = {
-      tokenID: tokenId,
-      price,
-      size,
-      side: side === 'BUY' ? Side.BUY : Side.SELL,
-    };
+    // CRITICAL: The clobClient passed in params might not have a signer (initialized with API creds only)
+    // We need a ClobClient WITH a signer to sign the order.
+    // Re-initialize a temporary client with the signer.
+    const clobClientWithSigner = new ClobClient(
+      CLOB_API_URL,
+      POLYGON_CHAIN_ID,
+      signer,
+      undefined, // creds (not needed if we have signer? actually we need creds for posting?)
+      // Wait, createOrder signs the order. postOrder sends it.
+      // If we use the signer, we don't strictly need creds for *signing*, but we need them for *posting* if we want to use API auth.
+      // But createOrder *uses* the signer.
+      // Let's pass the credentials from the original client if possible, or just use the signer for everything.
+      // Actually, better to just use the signer.
+      undefined,
+      undefined, // signatureType
+      undefined // funder
+    );
 
-    // Per Polymarket docs: Create and sign the order
-    // createOrder signs the order using the signer
-    const signedOrder = await clobClient.createOrder(userOrder);
+    // However, we want to use the *same* configuration (funder, etc.)
+    // The best way is to use the signer to sign, then use the original client to post?
+    // clobClient.createOrder() uses this.signer.
+
+    // Let's try to set the signer on the existing client if possible, or create a new one that mirrors it but has a signer.
+    // Since we can't easily inspect the passed clobClient's config, let's instantiate a new one with ALL the params we have.
+    // But we don't have creds passed to placePrediction explicitly (they are in clobClient).
+
+    // ALTERNATIVE: The `clobClient` passed to this function *should* have been initialized with a signer if we intended to use it for signing.
+    // But `initializeClobClient` sets signer to undefined.
+
+    // FIX: Instantiate a new ClobClient here using the signer and the params we know.
+    // We need the credentials to post the order? 
+    // Polymarket docs say: "You can use the L2 CLOB API with an API Key... or by signing every request with your L2 wallet."
+    // If we have API creds, we should use them for posting. But for *creating* (signing) the order, we need a signer.
+
+    // Let's create a client JUST for signing the order.
+    const signingClient = new ClobClient(
+      CLOB_API_URL,
+      POLYGON_CHAIN_ID,
+      signer
+    );
+
+    // Create and sign the order using the signing client
+    const signedOrder = await signingClient.createOrder(userOrder);
 
     // Per Polymarket docs: Post the signed order to the CLOB
     // orderType defaults to OrderType.GTC (Good Till Cancel)

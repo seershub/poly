@@ -420,8 +420,16 @@ export function usePlacePrediction() {
 
         } catch (relayerError: any) {
           console.warn('⚠️ Gasless approval failed:', relayerError.message);
-          console.warn('Falling back to manual approval...');
-          // Fallthrough to manual approval
+
+          // CRITICAL: If using Proxy Wallet, we CANNOT fallback to manual approval from EOA
+          // because the EOA is not the one holding the funds (the Proxy Wallet is).
+          // The user cannot manually approve from the Proxy Wallet without the Relayer (or complex Safe interaction).
+          if (proxyWalletAddress) {
+            throw new Error(`Gasless approval failed: ${relayerError.message}. Cannot fallback to manual approval for Proxy Wallet. Please try again later.`);
+          }
+
+          console.warn('Falling back to manual approval (EOA only)...');
+          // Fallthrough to manual approval ONLY if not using Proxy Wallet (which shouldn't happen here due to earlier checks, but safe to keep for EOA users)
         }
 
         // OPTION 2: Manual approval (Fallback or Primary if no server)

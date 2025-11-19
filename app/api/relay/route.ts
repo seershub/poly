@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         }
 
         // 2. Construct URL
-        const relayerUrl = POLYMARKET_RELAYER_URL || 'https://relayer.polymarket.com';
+        const relayerUrl = (POLYMARKET_RELAYER_URL || 'https://relayer.polymarket.com').replace(/\/$/, '');
         const fullUrl = `${relayerUrl}${path}`;
 
         // 3. Generate Headers using SDK (or manual if SDK fails, but SDK should work in Node)
