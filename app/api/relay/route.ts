@@ -1,7 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ethers } from 'ethers';
-import { RelayClient, OperationType, SafeTransaction } from '@polymarket/builder-relayer-client';
 import { BuilderApiKeyCreds, BuilderConfig } from '@polymarket/builder-signing-sdk';
+
+// CRITICAL: Use dynamic require to handle CJS/ESM compatibility
+const getRelayClient = () => {
+    try {
+        // Try to require the module
+        const relayerModule = require('@polymarket/builder-relayer-client');
+
+        // Try different export patterns
+        const RelayClient =
+            relayerModule.RelayClient ||           // Named export
+            relayerModule.default?.RelayClient ||  // Default with named property
+            relayerModule.default ||               // Direct default
+            relayerModule;                         // Module itself
+
+        if (typeof RelayClient !== 'function') {
+            throw new Error('RelayClient constructor not found in module');
+        }
+
+        return RelayClient;
+    } catch (error: any) {
+        console.error('Failed to load RelayClient:', error.message);
+        throw error;
+    }
+};
 
 export async function POST(request: NextRequest) {
     try {
@@ -17,13 +40,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Builder credentials not configured on server' }, { status: 500 });
         }
 
-        // 2. Create a server-side wallet (this is just for SDK initialization, not for signing user transactions)
-        // The SDK uses this wallet only for Builder authentication
+        // 2. Create a server-side wallet
         const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
         const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-
-        // Create a random wallet - it's only used for SDK initialization
-        // The actual transactions are executed on the user's Safe wallet
         const serverWallet = ethers.Wallet.createRandom().connect(provider);
 
         // 3. Initialize Builder Config
@@ -37,26 +56,28 @@ export async function POST(request: NextRequest) {
             localBuilderCreds: builderCreds
         });
 
-        // 4. Initialize Relay Client
+        // 4. Get RelayClient constructor
+        const RelayClient = getRelayClient();
+
+        // 5. Initialize Relay Client
         const relayerUrl = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
-        const chainId = 137; // Polygon mainnet
+        const chainId = 137;
 
         const client = new RelayClient(relayerUrl, chainId, serverWallet, builderConfig);
 
-        console.log('[Relayer Proxy] Executing transactions via SDK:', {
+        console.log('[Relayer Proxy] Executing transactions:', {
             transactionCount: transactions?.length,
             metadata,
             userAddress
         });
 
-        // 5. Execute transactions
-        // The SDK will handle all the complex request building, signing, and submission
+        // 6. Execute transactions
         const response = await client.execute(transactions, metadata || 'Transaction via Relayer');
 
-        console.log('[Relayer Proxy] Transaction submitted. Waiting for confirmation...');
+        console.log('[Relayer Proxy] Waiting for confirmation...');
         const result = await response.wait();
 
-        console.log('[Relayer Proxy] Transaction confirmed:', result);
+        console.log('[Relayer Proxy] Success:', result);
 
         return NextResponse.json({
             transactionID: result?.transactionID,
