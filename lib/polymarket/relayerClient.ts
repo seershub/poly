@@ -117,29 +117,51 @@ export async function initializeRelayerClient(walletClient: WalletClient): Promi
     });
 
     // Handle potential import mismatch (ESM vs CommonJS)
-  }
+    // If RelayClient is not a constructor, try to find it in the module
+    let ClientConstructor = RelayClient;
+
+    // @ts-ignore
+    if (typeof ClientConstructor !== 'function') {
+      // @ts-ignore
+      if (ClientConstructor?.default) {
+        // @ts-ignore
+        ClientConstructor = ClientConstructor.default;
+      } else {
+        // @ts-ignore
+        if (ClientConstructor?.RelayClient) {
+          // @ts-ignore
+          ClientConstructor = ClientConstructor.RelayClient;
+        }
+      }
+    }
+
+    // @ts-ignore
+    if (typeof ClientConstructor !== 'function') {
+      console.error('Failed to resolve RelayClient constructor. Module content:', RelayClient);
+      throw new Error('RelayClient is not a constructor');
+    }
 
     // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
     // IMPORTANT: The builderConfig must be passed as the 4th argument
     // @ts-ignore
     const client = new ClientConstructor(
-    RELAYER_URL,
-    POLYGON_CHAIN_ID,
-    signer,
-    builderConfig
-  );
+      RELAYER_URL,
+      POLYGON_CHAIN_ID,
+      signer,
+      builderConfig
+    );
 
-  console.log('Relayer client initialized successfully with config:', {
-    hasRemote: !!builderConfig.remoteBuilderConfig,
-    remoteUrl: builderConfig.remoteBuilderConfig?.url,
-    hasLocal: !!builderConfig.localBuilderCreds
-  });
+    console.log('Relayer client initialized successfully with config:', {
+      hasRemote: !!builderConfig.remoteBuilderConfig,
+      remoteUrl: builderConfig.remoteBuilderConfig?.url,
+      hasLocal: !!builderConfig.localBuilderCreds
+    });
 
-  return client;
-} catch (error) {
-  console.error('Error initializing relayer client:', error);
-  return null;
-}
+    return client;
+  } catch (error) {
+    console.error('Error initializing relayer client:', error);
+    return null;
+  }
 }
 
 /**
