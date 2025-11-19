@@ -385,7 +385,7 @@ export function usePlacePrediction() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               method: 'POST',
-              path: '/transactions', // Try /transactions on V2
+              path: '/submit', // Probe confirmed /submit exists (401 vs 404/405)
               data: payload
             })
           });
