@@ -29,52 +29,34 @@ export async function POST(request: NextRequest) {
                 secret: secret,
                 passphrase: passphrase,
             }
-        });
-
-        // Debugging Import
-        let RelayClient;
-        try {
-            // Try requiring the module
-            const module = require('@polymarket/builder-relayer-client');
-            RelayClient = module.RelayClient || module.default?.RelayClient || module.default;
-
-            if (typeof RelayClient !== 'function') {
-                const keys = Object.keys(module).join(', ');
-                const defaultKeys = module.default ? Object.keys(module.default).join(', ') : 'no-default';
-                throw new Error(`RelayClient not found. Exports: [${keys}], Default Exports: [${defaultKeys}]`);
-            }
-        } catch (importError: any) {
-            console.error('Import Error:', importError);
-            throw new Error(`Failed to load SDK: ${importError.message}`);
-        }
 
         const relayerUrl = POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
-        const client = new RelayClient(relayerUrl, POLYGON_CHAIN_ID, wallet, builderConfig);
+            const client = new RelayClient(relayerUrl, POLYGON_CHAIN_ID, wallet, builderConfig);
 
-        console.log('[Relayer Proxy] Executing transactions via SDK:', {
-            count: transactions?.length,
-            metadata
-        });
+            console.log('[Relayer Proxy] Executing transactions via SDK:', {
+                count: transactions?.length,
+                metadata
+            });
 
-        // 4. Execute Transactions
-        const response = await client.execute(transactions, metadata);
+            // 4. Execute Transactions
+            const response = await client.execute(transactions, metadata);
 
-        console.log('[Relayer Proxy] Transaction submitted. Waiting for confirmation...');
-        const result = await response.wait();
+            console.log('[Relayer Proxy] Transaction submitted. Waiting for confirmation...');
+            const result = await response.wait();
 
-        console.log('[Relayer Proxy] Transaction confirmed:', result);
+            console.log('[Relayer Proxy] Transaction confirmed:', result);
 
-        return NextResponse.json({
-            transactionHash: result?.transactionHash,
-            state: result?.state,
-            result: result
-        });
+            return NextResponse.json({
+                transactionHash: result?.transactionHash,
+                state: result?.state,
+                result: result
+            });
 
-    } catch (error: any) {
-        console.error('[Relayer Proxy] Error:', error);
-        return NextResponse.json(
-            { error: error.message || 'Relayer request failed' },
-            { status: 500 }
-        );
+        } catch (error: any) {
+            console.error('[Relayer Proxy] Error:', error);
+            return NextResponse.json(
+                { error: error.message || 'Relayer request failed' },
+                { status: 500 }
+            );
+        }
     }
-}
