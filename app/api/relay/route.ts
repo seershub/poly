@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ethers } from 'ethers';
 
-// CRITICAL: Dynamic import to avoid build-time issues
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
@@ -16,9 +15,28 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Builder credentials not configured' }, { status: 500 });
         }
 
-        // 2. Dynamic import of SDK modules
-        const { RelayClient } = await import('@polymarket/builder-relayer-client');
-        const { BuilderConfig } = await import('@polymarket/builder-signing-sdk');
+        // 2. Dynamic import with proper destructuring
+        const relayerModule = await import('@polymarket/builder-relayer-client');
+        const signingModule = await import('@polymarket/builder-signing-sdk');
+
+        // Try to get the correct constructors
+        const RelayClient = relayerModule.RelayClient || relayerModule.default;
+        const BuilderConfig = signingModule.BuilderConfig || signingModule.default;
+
+        console.log('[Relayer] SDK loaded:', {
+            hasRelayClient: !!RelayClient,
+            hasBuildConfig: !!BuilderConfig,
+            relayClientType: typeof RelayClient,
+            builderConfigType: typeof BuilderConfig
+        });
+
+        if (typeof RelayClient !== 'function') {
+            throw new Error('RelayClient is not a constructor');
+        }
+
+        if (typeof BuilderConfig !== 'function') {
+            throw new Error('BuilderConfig is not a constructor');
+        }
 
         // 3. Create server-side wallet
         const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
