@@ -103,7 +103,72 @@ export async function initializeRelayerClient(walletClient: WalletClient): Promi
     // Get builder configuration
     const builderConfig = getBuilderConfig();
 
-    RELAYER_URL,
+    if (!builderConfig) {
+      console.warn('Builder config not available. Relayer features disabled.');
+      return null;
+    }
+
+    // DEBUG: Log the module structure to understand the import issue
+    console.log('RelayerModule Keys:', Object.keys(RelayerModule));
+    // @ts-ignore
+    if (RelayerModule.default) {
+      // @ts-ignore
+      console.log('RelayerModule.default Keys:', Object.keys(RelayerModule.default));
+    }
+
+    // Try to find the constructor
+    // @ts-ignore
+    let ClientConstructor = RelayerModule.RelayClient;
+
+    if (!ClientConstructor) {
+      // @ts-ignore
+      if (RelayerModule.default) {
+        // @ts-ignore
+        ClientConstructor = RelayerModule.default.RelayClient || RelayerModule.default;
+      }
+    }
+
+    // Brute force search for RelayClient
+    if (typeof ClientConstructor !== 'function') {
+      console.log('Searching for RelayClient constructor in module exports...');
+      for (const key in RelayerModule) {
+        // @ts-ignore
+        const exportVal = RelayerModule[key];
+        if (typeof exportVal === 'function' && (exportVal.name === 'RelayClient' || key === 'RelayClient')) {
+          console.log(`Found RelayClient at RelayerModule.${key}`);
+          ClientConstructor = exportVal;
+          break;
+        }
+        // Search inside default
+        if (key === 'default' && typeof exportVal === 'object' && exportVal !== null) {
+          for (const subKey in exportVal) {
+            // @ts-ignore
+            const subExport = exportVal[subKey];
+            if (typeof subExport === 'function' && (subExport.name === 'RelayClient' || subKey === 'RelayClient')) {
+              console.log(`Found RelayClient at RelayerModule.default.${subKey}`);
+              ClientConstructor = subExport;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // @ts-ignore
+    if (typeof ClientConstructor !== 'function') {
+      const moduleDump = JSON.stringify(RelayerModule, (key, value) => {
+        if (typeof value === 'function') return `[Function: ${value.name || 'anonymous'}]`;
+        return value;
+      }, 2);
+      console.error('Failed to resolve RelayClient constructor. Module content:', moduleDump);
+      throw new Error(`RelayClient is not a constructor. Module keys: ${Object.keys(RelayerModule).join(', ')}`);
+    }
+
+    // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
+    // IMPORTANT: The builderConfig must be passed as the 4th argument
+    // @ts-ignore
+    const client = new ClientConstructor(
+      RELAYER_URL,
       POLYGON_CHAIN_ID,
       signer,
       builderConfig
