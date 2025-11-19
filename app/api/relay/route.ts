@@ -15,48 +15,101 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Builder credentials not configured' }, { status: 500 });
         }
 
-        // 2. Dynamic import with proper destructuring
-        const relayerModule = await import('@polymarket/builder-relayer-client');
-        const signingModule = await import('@polymarket/builder-signing-sdk');
+        // 2. Dynamic import using namespace pattern (same as lib/polymarket/relayerClient.ts)
+        // Per Polymarket docs: Use namespace import to handle both CommonJS and ESM exports
+        const RelayerModule = await import('@polymarket/builder-relayer-client');
+        const { BuilderConfig, BuilderApiKeyCreds } = await import('@polymarket/builder-signing-sdk');
 
-        // Try to get the correct constructors
-        const RelayClient = relayerModule.RelayClient || relayerModule.default;
-        const BuilderConfig = signingModule.BuilderConfig || signingModule.default;
+        // 3. Find RelayClient constructor (same pattern as lib/polymarket/relayerClient.ts)
+        // @ts-ignore - Dynamic module inspection
+        let ClientConstructor = RelayerModule.RelayClient;
 
-        console.log('[Relayer] SDK loaded:', {
-            hasRelayClient: !!RelayClient,
-            hasBuildConfig: !!BuilderConfig,
-            relayClientType: typeof RelayClient,
-            builderConfigType: typeof BuilderConfig
-        });
-
-        if (typeof RelayClient !== 'function') {
-            throw new Error('RelayClient is not a constructor');
+        if (!ClientConstructor || typeof ClientConstructor !== 'function') {
+            // @ts-ignore
+            if (RelayerModule.default) {
+                // @ts-ignore
+                ClientConstructor = RelayerModule.default.RelayClient || RelayerModule.default;
+            }
         }
 
+        // Brute force search for RelayClient if still not found
+        if (typeof ClientConstructor !== 'function') {
+            console.log('[Relayer] Searching for RelayClient constructor in module exports...');
+            for (const key in RelayerModule) {
+                // @ts-ignore
+                const exportVal = RelayerModule[key];
+                if (typeof exportVal === 'function' && (exportVal.name === 'RelayClient' || key === 'RelayClient')) {
+                    console.log(`[Relayer] Found RelayClient at RelayerModule.${key}`);
+                    ClientConstructor = exportVal;
+                    break;
+                }
+                // Search inside default
+                if (key === 'default' && typeof exportVal === 'object' && exportVal !== null) {
+                    for (const subKey in exportVal) {
+                        // @ts-ignore
+                        const subExport = exportVal[subKey];
+                        if (typeof subExport === 'function' && (subExport.name === 'RelayClient' || subKey === 'RelayClient')) {
+                            console.log(`[Relayer] Found RelayClient at RelayerModule.default.${subKey}`);
+                            ClientConstructor = subExport;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Validate constructor
+        if (typeof ClientConstructor !== 'function') {
+            const moduleKeys = Object.keys(RelayerModule).join(', ');
+            console.error('[Relayer] Failed to resolve RelayClient constructor. Module keys:', moduleKeys);
+            throw new Error(`RelayClient is not a constructor. Module keys: ${moduleKeys}`);
+        }
+
+        // Validate BuilderConfig
         if (typeof BuilderConfig !== 'function') {
             throw new Error('BuilderConfig is not a constructor');
         }
 
-        // 3. Create server-side wallet
-        const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
-        const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-        const serverWallet = ethers.Wallet.createRandom().connect(provider);
-
-        // 4. Initialize Builder Config
-        const builderConfig = new BuilderConfig({
-            localBuilderCreds: {
-                key: apiKey,
-                secret: secret,
-                passphrase: passphrase,
-            }
+        console.log('[Relayer] SDK loaded successfully:', {
+            hasRelayClient: typeof ClientConstructor === 'function',
+            hasBuilderConfig: typeof BuilderConfig === 'function',
+            relayClientName: ClientConstructor.name || 'anonymous'
         });
 
-        // 5. Initialize Relay Client
-        const relayerUrl = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
-        const chainId = 137;
+        // 4. Create a signer for RelayClient constructor
+        // Note: Polymarket Relayer uses the user's proxy wallet for actual execution
+        // The signer here is just for constructor initialization - Relayer handles actual signing
+        const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
+        const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+        
+        // Use userAddress if provided, otherwise use a placeholder address
+        // VoidSigner is a read-only signer that can't sign but satisfies the constructor
+        const signerAddress = userAddress || ethers.Wallet.createRandom().address;
+        const signer = new ethers.VoidSigner(signerAddress, provider);
 
-        const client = new RelayClient(relayerUrl, chainId, serverWallet, builderConfig);
+        // 5. Initialize Builder Config
+        // Per Polymarket docs: BuilderConfig with localBuilderCreds
+        const builderCreds: BuilderApiKeyCreds = {
+            key: apiKey,
+            secret: secret,
+            passphrase: passphrase,
+        };
+        const builderConfig = new BuilderConfig({
+            localBuilderCreds: builderCreds,
+        });
+
+        // 6. Initialize Relay Client
+        // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
+        const relayerUrl = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
+        const chainId = 137; // Polygon mainnet
+
+        // @ts-ignore - Dynamic constructor
+        const client = new ClientConstructor(
+            relayerUrl,
+            chainId,
+            signer,
+            builderConfig
+        );
 
         console.log('[Relayer] Executing transactions:', {
             transactionCount: transactions?.length,
@@ -64,13 +117,23 @@ export async function POST(request: NextRequest) {
             userAddress
         });
 
-        // 6. Execute transactions
-        const response = await client.execute(transactions, metadata || 'Gasless transaction');
+        // 7. Execute transactions
+        // Per Polymarket docs: Use executeSafeTransactions for Safe transactions
+        // The transactions array contains SafeTransaction objects
+        const response = await client.executeSafeTransactions(
+            transactions,
+            metadata || 'Gasless transaction'
+        );
 
         console.log('[Relayer] Waiting for confirmation...');
         const result = await response.wait();
 
-        console.log('[Relayer] Success:', result);
+        console.log('[Relayer] Success:', {
+            transactionID: result?.transactionID,
+            transactionHash: result?.transactionHash,
+            state: result?.state,
+            proxyAddress: result?.proxyAddress
+        });
 
         return NextResponse.json({
             transactionID: result?.transactionID,
