@@ -18,7 +18,45 @@ export async function POST(request: NextRequest) {
         // 2. Dynamic import using namespace pattern (same as lib/polymarket/relayerClient.ts)
         // Per Polymarket docs: Use namespace import to handle both CommonJS and ESM exports
         const RelayerModule = await import('@polymarket/builder-relayer-client');
-        const { BuilderConfig, BuilderApiKeyCreds } = await import('@polymarket/builder-signing-sdk');
+        const SigningModule = await import('@polymarket/builder-signing-sdk');
+        
+        // Get BuilderConfig from module (handle both named and default exports)
+        // @ts-ignore - Dynamic module inspection
+        let BuilderConfig = SigningModule.BuilderConfig;
+        
+        if (!BuilderConfig || typeof BuilderConfig !== 'function') {
+            // @ts-ignore
+            if (SigningModule.default) {
+                // @ts-ignore
+                BuilderConfig = SigningModule.default.BuilderConfig || SigningModule.default;
+            }
+        }
+        
+        // Brute force search for BuilderConfig if still not found
+        if (typeof BuilderConfig !== 'function') {
+            console.log('[Relayer] Searching for BuilderConfig constructor in module exports...');
+            for (const key in SigningModule) {
+                // @ts-ignore
+                const exportVal = SigningModule[key];
+                if (typeof exportVal === 'function' && (exportVal.name === 'BuilderConfig' || key === 'BuilderConfig')) {
+                    console.log(`[Relayer] Found BuilderConfig at SigningModule.${key}`);
+                    BuilderConfig = exportVal;
+                    break;
+                }
+                // Search inside default
+                if (key === 'default' && typeof exportVal === 'object' && exportVal !== null) {
+                    for (const subKey in exportVal) {
+                        // @ts-ignore
+                        const subExport = exportVal[subKey];
+                        if (typeof subExport === 'function' && (subExport.name === 'BuilderConfig' || subKey === 'BuilderConfig')) {
+                            console.log(`[Relayer] Found BuilderConfig at SigningModule.default.${subKey}`);
+                            BuilderConfig = subExport;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
 
         // 3. Find RelayClient constructor (same pattern as lib/polymarket/relayerClient.ts)
         // @ts-ignore - Dynamic module inspection
@@ -89,7 +127,7 @@ export async function POST(request: NextRequest) {
 
         // 5. Initialize Builder Config
         // Per Polymarket docs: BuilderConfig with localBuilderCreds
-        const builderCreds: BuilderApiKeyCreds = {
+        const builderCreds = {
             key: apiKey,
             secret: secret,
             passphrase: passphrase,
