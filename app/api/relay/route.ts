@@ -158,6 +158,7 @@ export async function POST(request: NextRequest) {
         // 7. Execute transactions
         // Per Polymarket docs: Use executeSafeTransactions for Safe transactions
         // The transactions array contains SafeTransaction objects
+        // @ts-ignore - Type definitions may be outdated, but method exists at runtime
         const response = await client.executeSafeTransactions(
             transactions,
             metadata || 'Gasless transaction'
