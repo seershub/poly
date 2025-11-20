@@ -171,17 +171,44 @@ export async function POST(request: NextRequest) {
         
         // Create a wallet with user's address
         // SDK uses wallet.address to identify Safe wallet
-        // We create a random wallet and override address to user's EOA
-        const tempWallet = ethers.Wallet.createRandom();
-        const wallet = tempWallet.connect(provider);
+        // CRITICAL: We need to create a wallet-like object with user's address
+        // Since ethers.Wallet doesn't allow setting address directly,
+        // we create a proxy that intercepts address access
         
-        // Override address to user's EOA (SDK uses this to find Safe wallet)
-        // @ts-ignore - Overriding read-only property for SDK compatibility
-        Object.defineProperty(wallet, 'address', {
-            value: userAddress,
-            writable: false,
-            configurable: true,
-        });
+        // Create a random wallet for the signer functionality
+        const tempWallet = ethers.Wallet.createRandom();
+        const baseWallet = tempWallet.connect(provider);
+        
+        // Create a proxy that intercepts address property access
+        // This allows SDK to read wallet.address and get userAddress
+        const wallet = new Proxy(baseWallet, {
+            get(target, prop) {
+                if (prop === 'address') {
+                    return userAddress;
+                }
+                return (target as any)[prop];
+            },
+            has(target, prop) {
+                if (prop === 'address') {
+                    return true;
+                }
+                return prop in target;
+            },
+            ownKeys(target) {
+                return [...Reflect.ownKeys(target), 'address'];
+            },
+            getOwnPropertyDescriptor(target, prop) {
+                if (prop === 'address') {
+                    return {
+                        value: userAddress,
+                        writable: false,
+                        enumerable: true,
+                        configurable: true,
+                    };
+                }
+                return Reflect.getOwnPropertyDescriptor(target, prop);
+            },
+        }) as typeof baseWallet;
         
         // CRITICAL: SDK expects provider to have config property (viem format)
         // Add config to provider for SDK compatibility
