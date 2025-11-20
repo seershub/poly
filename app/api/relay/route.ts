@@ -93,24 +93,115 @@ export async function POST(request: NextRequest) {
         }
 
         // 5. Create provider and wallet
-        // Per Polymarket docs: RelayClient needs a Signer/Wallet
-        // SDK uses wallet.address to identify the Safe wallet for the user
+        // DEEP ANALYSIS: SDK internally uses viem which expects provider.config
+        // lib/ethersAdapter.ts uses Web3Provider which has different structure
+        // Server-side: We need to create a provider that matches SDK expectations
+        
         const chainId = 137; // Polygon mainnet
         const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
         const network = ethers.providers.getNetwork(chainId);
-        const provider = new ethers.providers.JsonRpcProvider(rpcUrl, network);
+        
+        // Create base provider
+        const baseProvider = new ethers.providers.JsonRpcProvider(rpcUrl, network);
+        
+        // CRITICAL: SDK expects provider.config.chain structure (viem format)
+        // SDK accesses: provider.config.chain.id, provider.config.chain.rpcUrls, etc.
+        // We need to ensure config is accessible via property access
+        const providerWithConfig = Object.create(baseProvider);
+        
+        // Add config property with viem-compatible structure
+        // Use Object.defineProperty to ensure it's enumerable and accessible
+        Object.defineProperty(providerWithConfig, 'config', {
+            value: {
+                chain: {
+                    id: chainId,
+                    name: 'polygon',
+                    network: 'polygon',
+                    nativeCurrency: {
+                        name: 'MATIC',
+                        symbol: 'MATIC',
+                        decimals: 18,
+                    },
+                    rpcUrls: {
+                        default: {
+                            http: [rpcUrl],
+                        },
+                        public: {
+                            http: [rpcUrl],
+                        },
+                    },
+                    blockExplorers: {
+                        default: {
+                            name: 'PolygonScan',
+                            url: 'https://polygonscan.com',
+                        },
+                    },
+                },
+            },
+            writable: false,
+            enumerable: true,
+            configurable: true,
+        });
+
+        // Create a Proxy to delegate all other properties to base provider
+        // This ensures provider methods (send, call, etc.) work correctly
+        const provider = new Proxy(providerWithConfig, {
+            get(target, prop) {
+                if (prop === 'config') {
+                    return target.config;
+                }
+                // Delegate to base provider for all other properties
+                const value = (baseProvider as any)[prop];
+                if (typeof value === 'function') {
+                    return value.bind(baseProvider);
+                }
+                return value;
+            },
+            has(target, prop) {
+                return prop === 'config' || prop in baseProvider;
+            },
+            ownKeys(target) {
+                return ['config', ...Object.keys(baseProvider)];
+            },
+            getOwnPropertyDescriptor(target, prop) {
+                if (prop === 'config') {
+                    return {
+                        value: target.config,
+                        writable: false,
+                        enumerable: true,
+                        configurable: true,
+                    };
+                }
+                return Reflect.getOwnPropertyDescriptor(baseProvider, prop);
+            },
+        });
 
         // CRITICAL: Create a wallet with user's address
         // Per Polymarket docs: SDK uses wallet.address to find the Safe wallet
-        // We create a minimal signer that satisfies SDK requirements
-        // Signing is handled by Builder credentials, not the wallet itself
+        // SDK also accesses wallet.provider.config internally
         const wallet = {
             address: userAddress,
-            provider: provider,
+            provider: provider, // Provider with config property via Proxy
             getAddress: () => Promise.resolve(userAddress),
             // @ts-ignore - SDK compatibility
             _isSigner: true,
         } as any;
+
+        // Verify provider.config is accessible (critical for debugging)
+        const configCheck = {
+            hasConfig: !!(provider as any).config,
+            configChainId: (provider as any).config?.chain?.id,
+            providerType: provider.constructor.name,
+            walletAddress: wallet.address,
+            walletProviderType: wallet.provider?.constructor?.name,
+            walletProviderHasConfig: !!(wallet.provider as any)?.config,
+        };
+        console.log('[Relayer] Provider verification:', configCheck);
+        
+        // CRITICAL: If config is not accessible, throw error before SDK initialization
+        if (!(provider as any).config) {
+            throw new Error('Provider config is not accessible. SDK requires provider.config.chain structure.');
+        }
 
         // 6. Initialize Builder Config
         // Per Polymarket docs: Support both remote and local builder credentials
@@ -129,17 +220,35 @@ export async function POST(request: NextRequest) {
         } else {
             // Local credentials
             builderConfig = new BuilderConfig({
-                localBuilderCreds: {
-                    key: apiKey,
-                    secret: secret,
-                    passphrase: passphrase,
+            localBuilderCreds: {
+                key: apiKey,
+                secret: secret,
+                passphrase: passphrase,
                 },
             });
-        }
+            }
 
         // 7. Initialize Relay Client
         // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
+        // CRITICAL: SDK accesses wallet.provider.config in constructor
+        // Verify wallet.provider.config is accessible BEFORE constructor call
         const relayerUrl = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
+        
+        // Final verification before SDK initialization
+        if (!wallet.provider || !(wallet.provider as any).config) {
+            throw new Error(
+                `Wallet provider config is not accessible. ` +
+                `Provider: ${wallet.provider ? wallet.provider.constructor.name : 'undefined'}, ` +
+                `Has config: ${!!(wallet.provider as any)?.config}`
+            );
+        }
+        
+        console.log('[Relayer] Pre-constructor verification:', {
+            walletAddress: wallet.address,
+            walletProviderExists: !!wallet.provider,
+            walletProviderConfigExists: !!(wallet.provider as any).config,
+            walletProviderConfigChainId: (wallet.provider as any).config?.chain?.id,
+        });
         
         const client = new RelayClient(
             relayerUrl,
