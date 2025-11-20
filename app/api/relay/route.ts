@@ -144,15 +144,21 @@ export async function POST(request: NextRequest) {
         });
 
         // 4. Create a wallet for RelayClient constructor
-        // Note: Polymarket Relayer uses the user's proxy wallet for actual execution
-        // The wallet here is just for constructor initialization - Relayer handles actual signing
-        // Per Polymarket docs: RelayClient requires a Wallet or Signer, but Relayer uses proxy wallet for execution
+        // CRITICAL: Must use user's EOA address, not random wallet
+        // Per Polymarket docs: Safe wallet is tied to the EOA address
+        // RelayClient uses the wallet address to find/deploy the correct Safe wallet
+        if (!userAddress) {
+            throw new Error('User address is required for Safe wallet operations');
+        }
+        
         const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
         const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
         
-        // Create a random wallet for constructor (Relayer uses user's proxy wallet for actual execution)
-        // This wallet is only used for constructor initialization, not for signing transactions
-        const wallet = ethers.Wallet.createRandom().connect(provider);
+        // Create a VoidSigner from user's EOA address
+        // This allows RelayClient to identify the correct Safe wallet for this user
+        // VoidSigner can't sign but satisfies the constructor requirement
+        // @ts-ignore - VoidSigner satisfies the interface but TypeScript doesn't recognize it
+        const wallet = new ethers.VoidSigner(userAddress, provider) as any;
 
         // 5. Initialize Builder Config
         // Per Polymarket docs: Support both remote and local builder credentials
@@ -206,22 +212,41 @@ export async function POST(request: NextRequest) {
             userAddress
         });
 
-        // 7. Check if Safe wallet is deployed, deploy if not
+        // 7. Get expected Safe wallet address and check if deployed
+        // Per Polymarket docs: Safe wallet address is deterministic from EOA address
+        let expectedSafeAddress: string | null = null;
+        if (typeof client.getExpectedSafe === 'function') {
+            try {
+                expectedSafeAddress = await client.getExpectedSafe();
+                console.log('[Relayer] Expected Safe wallet address:', expectedSafeAddress);
+            } catch (error) {
+                console.log('[Relayer] Could not get expected Safe address:', error);
+            }
+        }
+
+        // Check if Safe wallet is deployed, deploy if not
         // Per Polymarket docs: Safe wallet must be deployed before executing transactions
         let safeDeployed = false;
         if (typeof client.getDeployed === 'function') {
             try {
                 const deployed = await client.getDeployed();
                 safeDeployed = !!deployed;
-                console.log('[Relayer] Safe wallet deployment status:', { deployed: safeDeployed, address: deployed });
-            } catch (error) {
-                console.log('[Relayer] Could not check Safe deployment status:', error);
+                console.log('[Relayer] Safe wallet deployment status:', { 
+                    deployed: safeDeployed, 
+                    address: deployed,
+                    expectedAddress: expectedSafeAddress,
+                    userAddress: userAddress
+                });
+            } catch (error: any) {
+                // getDeployed might fail if Safe is not deployed yet - this is OK
+                console.log('[Relayer] Safe wallet not deployed yet (this is OK for first-time users):', error.message || error);
+                safeDeployed = false;
             }
         }
 
         // Deploy Safe wallet if not deployed
         if (!safeDeployed) {
-            console.log('[Relayer] Safe wallet not deployed. Deploying now...');
+            console.log('[Relayer] Safe wallet not deployed. Deploying now for user:', userAddress);
             if (typeof client.deploy === 'function') {
                 try {
                     const deployResponse = await client.deploy();
@@ -229,7 +254,9 @@ export async function POST(request: NextRequest) {
                     if (deployResult && deployResult.proxyAddress) {
                         console.log('[Relayer] Safe wallet deployed successfully:', {
                             transactionHash: deployResult.transactionHash,
-                            safeAddress: deployResult.proxyAddress
+                            safeAddress: deployResult.proxyAddress,
+                            userEOA: userAddress,
+                            matchesExpected: deployResult.proxyAddress.toLowerCase() === expectedSafeAddress?.toLowerCase()
                         });
                         safeDeployed = true;
                     } else {

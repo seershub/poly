@@ -220,9 +220,14 @@ export async function placePrediction(params: {
       status: 'LIVE',
       timestamp: Date.now(),
     };
-  } catch (error) {
-    console.error('Error placing prediction:', error);
-    throw new Error('Failed to place prediction order');
+  } catch (error: any) {
+    console.error('Error placing prediction:', {
+      message: error?.message,
+      stack: error?.stack,
+      response: error?.response?.data,
+      status: error?.response?.status,
+    });
+    throw new Error(`Failed to place prediction order: ${error?.message || error?.response?.data?.error || 'Unknown error'}`);
   }
 }
 
