@@ -1,398 +1,240 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ethers } from 'ethers';
 
+/**
+ * Polymarket Relayer API Route
+ * 
+ * Per Polymarket Builder Program docs: https://docs.polymarket.com/developers/builders/builder-intro
+ * 
+ * This endpoint handles gasless transactions via Polymarket's Polygon Relayer.
+ * Polymarket pays for gas fees when using Safe Wallets.
+ * 
+ * POST /api/relay
+ * Body: {
+ *   transactions: SafeTransaction[],
+ *   metadata?: string,
+ *   userAddress: string (EOA address - required for Safe wallet identification)
+ * }
+ */
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const { transactions, metadata, userAddress } = body;
 
+        // Validate input
+        if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
+            return NextResponse.json(
+                { error: 'transactions array is required' },
+                { status: 400 }
+            );
+        }
+
+        if (!userAddress || !ethers.utils.isAddress(userAddress)) {
+            return NextResponse.json(
+                { error: 'Valid userAddress is required' },
+                { status: 400 }
+            );
+        }
+
         // 1. Get Builder Credentials
+        // Per Polymarket docs: Builder credentials are required for relayer access
         const apiKey = process.env.POLY_BUILDER_API_KEY;
         const secret = process.env.POLY_BUILDER_SECRET;
         const passphrase = process.env.POLY_BUILDER_PASSPHRASE;
 
         if (!apiKey || !secret || !passphrase) {
-            return NextResponse.json({ error: 'Builder credentials not configured' }, { status: 500 });
+            return NextResponse.json(
+                { error: 'Builder credentials not configured. POLY_BUILDER_API_KEY, SECRET, and PASSPHRASE are required.' },
+                { status: 500 }
+            );
         }
 
-        // 2. Dynamic import using namespace pattern (same as lib/polymarket/relayerClient.ts)
-        // Per Polymarket docs: Use namespace import to handle both CommonJS and ESM exports
+        // 2. Import SDK modules
+        // Per Polymarket docs: Use dynamic imports for server-side compatibility
         const RelayerModule = await import('@polymarket/builder-relayer-client');
         const SigningModule = await import('@polymarket/builder-signing-sdk');
-        
-        // Get BuilderConfig from module (handle both named and default exports)
-        // @ts-ignore - Dynamic module inspection
-        let BuilderConfig = SigningModule.BuilderConfig;
-        
-        if (!BuilderConfig || typeof BuilderConfig !== 'function') {
-            // @ts-ignore
-            if (SigningModule.default) {
-                // @ts-ignore
-                BuilderConfig = SigningModule.default.BuilderConfig || SigningModule.default;
-            }
-        }
-        
-        // Brute force search for BuilderConfig if still not found
-        if (typeof BuilderConfig !== 'function') {
-            console.log('[Relayer] Searching for BuilderConfig constructor in module exports...');
-            for (const key in SigningModule) {
-                // @ts-ignore
-                const exportVal = SigningModule[key];
-                if (typeof exportVal === 'function' && (exportVal.name === 'BuilderConfig' || key === 'BuilderConfig')) {
-                    console.log(`[Relayer] Found BuilderConfig at SigningModule.${key}`);
-                    BuilderConfig = exportVal;
-                    break;
-                }
-                // Search inside default
-                if (key === 'default' && typeof exportVal === 'object' && exportVal !== null) {
-                    for (const subKey in exportVal) {
-                        // @ts-ignore
-                        const subExport = exportVal[subKey];
-                        if (typeof subExport === 'function' && (subExport.name === 'BuilderConfig' || subKey === 'BuilderConfig')) {
-                            console.log(`[Relayer] Found BuilderConfig at SigningModule.default.${subKey}`);
-                            BuilderConfig = subExport;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
 
         // 3. Find RelayClient constructor
-        // Per Polymarket SDK: The module uses default export, so RelayClient is in default
-        // @ts-ignore - Dynamic module inspection
-        let ClientConstructor: any = null;
+        // Per Polymarket SDK: RelayClient is exported as named export
+        let RelayClient: any = null;
         
-        // Log module structure for debugging
-        console.log('[Relayer] Module keys:', Object.keys(RelayerModule));
-        if (RelayerModule.default) {
-            console.log('[Relayer] Default export keys:', Object.keys(RelayerModule.default));
-        }
-        
-        // Try named export first
-        // @ts-ignore
         if (RelayerModule.RelayClient && typeof RelayerModule.RelayClient === 'function') {
-            ClientConstructor = RelayerModule.RelayClient;
-            console.log('[Relayer] Found RelayClient as named export');
-        }
-        // Try default export (most common case)
-        else if (RelayerModule.default) {
-            // @ts-ignore
-            if (RelayerModule.default.RelayClient && typeof RelayerModule.default.RelayClient === 'function') {
-                // @ts-ignore
-                ClientConstructor = RelayerModule.default.RelayClient;
-                console.log('[Relayer] Found RelayClient at default.RelayClient');
-            }
-            // Default export might be RelayClient itself
-            // @ts-ignore
-            else if (typeof RelayerModule.default === 'function') {
-                // @ts-ignore
-                ClientConstructor = RelayerModule.default;
-                console.log('[Relayer] Found RelayClient as default export');
-            }
+            RelayClient = RelayerModule.RelayClient;
+        } else if (RelayerModule.default?.RelayClient) {
+            RelayClient = RelayerModule.default.RelayClient;
+        } else if (typeof RelayerModule.default === 'function') {
+            RelayClient = RelayerModule.default;
         }
 
-        // Brute force search if still not found
-        if (!ClientConstructor || typeof ClientConstructor !== 'function') {
-            console.log('[Relayer] Searching for RelayClient constructor in module exports...');
-            for (const key in RelayerModule) {
-                // @ts-ignore
-                const exportVal = RelayerModule[key];
-                if (typeof exportVal === 'function') {
-                    // Check function name or key name
-                    // @ts-ignore
-                    if (exportVal.name === 'RelayClient' || key === 'RelayClient') {
-                        console.log(`[Relayer] Found RelayClient at RelayerModule.${key}`);
-                        ClientConstructor = exportVal;
-                        break;
-                    }
-                }
-                // Search inside default object
-                if (key === 'default' && typeof exportVal === 'object' && exportVal !== null) {
-                    for (const subKey in exportVal) {
-                        // @ts-ignore
-                        const subExport = exportVal[subKey];
-                        if (typeof subExport === 'function') {
-                            // @ts-ignore
-                            if (subExport.name === 'RelayClient' || subKey === 'RelayClient') {
-                                console.log(`[Relayer] Found RelayClient at RelayerModule.default.${subKey}`);
-                                ClientConstructor = subExport;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Validate constructor
-        if (typeof ClientConstructor !== 'function') {
+        if (!RelayClient || typeof RelayClient !== 'function') {
             const moduleKeys = Object.keys(RelayerModule).join(', ');
-            console.error('[Relayer] Failed to resolve RelayClient constructor. Module keys:', moduleKeys);
-            throw new Error(`RelayClient is not a constructor. Module keys: ${moduleKeys}`);
+            return NextResponse.json(
+                { error: `RelayClient constructor not found. Module keys: ${moduleKeys}` },
+                { status: 500 }
+            );
         }
 
-        // Validate BuilderConfig
-        if (typeof BuilderConfig !== 'function') {
-            throw new Error('BuilderConfig is not a constructor');
-        }
-
-        console.log('[Relayer] SDK loaded successfully:', {
-            hasRelayClient: typeof ClientConstructor === 'function',
-            hasBuilderConfig: typeof BuilderConfig === 'function',
-            relayClientName: ClientConstructor.name || 'anonymous'
-        });
-
-        // 4. Create a wallet for RelayClient constructor
-        // CRITICAL: Per Polymarket docs and lib/polymarket/relayerClient.ts pattern
-        // SDK needs a Wallet/Signer with proper provider that has network config
-        // The wallet address identifies the Safe wallet, but we use user's address
-        if (!userAddress) {
-            throw new Error('User address is required for Safe wallet operations');
-        }
+        // 4. Find BuilderConfig constructor
+        let BuilderConfig: any = null;
         
-        const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
+        if (SigningModule.BuilderConfig && typeof SigningModule.BuilderConfig === 'function') {
+            BuilderConfig = SigningModule.BuilderConfig;
+        } else if (SigningModule.default?.BuilderConfig) {
+            BuilderConfig = SigningModule.default.BuilderConfig;
+        } else if (typeof SigningModule.default === 'function') {
+            BuilderConfig = SigningModule.default;
+        }
+
+        if (!BuilderConfig || typeof BuilderConfig !== 'function') {
+            return NextResponse.json(
+                { error: 'BuilderConfig constructor not found' },
+                { status: 500 }
+            );
+        }
+
+        // 5. Create provider and wallet
+        // Per Polymarket docs: RelayClient needs a Signer/Wallet
+        // SDK uses wallet.address to identify the Safe wallet for the user
         const chainId = 137; // Polygon mainnet
-        
-        // CRITICAL: Per Polymarket SDK and lib/polymarket/relayerClient.ts pattern
-        // SDK uses viem internally, but accepts ethers Signer
-        // The signer must have a provider with proper network config
-        // We need to create a signer that matches the pattern in relayerClient.ts
-        
-        // Create provider with network configuration
+        const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
         const network = ethers.providers.getNetwork(chainId);
         const provider = new ethers.providers.JsonRpcProvider(rpcUrl, network);
-        
-        // CRITICAL: SDK internally uses viem which expects provider.config
-        // But ethers provider doesn't have config. We need to create a compatible signer
-        // Per lib/polymarket/relayerClient.ts: walletClientToSigner creates Web3Provider from window.ethereum
-        // But in server-side, we don't have window.ethereum
-        // Solution: Create a JsonRpcSigner-like object that SDK can use
-        
-        // CRITICAL: Per Polymarket docs, RelayClient needs a Signer/Wallet
-        // But in server-side, we only have userAddress, not a real wallet
-        // SDK uses wallet.address to identify the Safe wallet for the user
-        // 
-        // Solution: Create a minimal signer-like object that satisfies SDK requirements
-        // SDK only needs:
-        // 1. wallet.address - to identify which Safe wallet to use
-        // 2. wallet.provider - for network configuration
-        // 3. Signing is handled by Builder credentials, not the wallet
-        
-        // Create a minimal wallet-like object
-        // We don't need actual signing capability since Builder credentials handle that
+
+        // CRITICAL: Create a wallet with user's address
+        // Per Polymarket docs: SDK uses wallet.address to find the Safe wallet
+        // We create a minimal signer that satisfies SDK requirements
+        // Signing is handled by Builder credentials, not the wallet itself
         const wallet = {
             address: userAddress,
             provider: provider,
-            // Add minimal signer interface methods (SDK might check for these)
             getAddress: () => Promise.resolve(userAddress),
             // @ts-ignore - SDK compatibility
             _isSigner: true,
         } as any;
-        
-        // CRITICAL: SDK expects provider to have config property (viem format)
-        // Add config to provider for SDK compatibility
-        // @ts-ignore - Adding config property for SDK compatibility
-        if (!provider.config) {
-            // @ts-ignore
-            provider.config = {
-                chain: {
-                    id: chainId,
-                    name: 'polygon',
-                    network: 'polygon',
-                    nativeCurrency: {
-                        name: 'MATIC',
-                        symbol: 'MATIC',
-                        decimals: 18,
-                    },
-                    rpcUrls: {
-                        default: {
-                            http: [rpcUrl],
-                        },
-                    },
-                },
-            };
-        }
-        
-        console.log('[Relayer] Wallet created for user:', {
-            userAddress,
-            walletAddress: wallet.address,
-            providerNetwork: provider.network?.chainId,
-            // @ts-ignore - config is added dynamically for SDK compatibility
-            providerHasConfig: !!(provider as any).config
-        });
 
-        // 5. Initialize Builder Config
+        // 6. Initialize Builder Config
         // Per Polymarket docs: Support both remote and local builder credentials
-        // Priority: Remote signing server (more secure) > Local credentials
         const signingServerUrl = process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
         
         let builderConfig;
         if (signingServerUrl) {
-            // Use remote signing server (RECOMMENDED - more secure)
-            // Ensure URL ends with /sign if not already
+            // Remote signing server (RECOMMENDED)
             const signingUrl = signingServerUrl.endsWith('/sign') 
                 ? signingServerUrl 
                 : `${signingServerUrl.replace(/\/$/, '')}/sign`;
-            console.log('[Relayer] Using remote builder signing server:', signingUrl);
+            
             builderConfig = new BuilderConfig({
                 remoteBuilderConfig: { url: signingUrl },
             });
         } else {
-            // Use local credentials (fallback)
-            console.log('[Relayer] Using local builder credentials');
-            const builderCreds = {
-                key: apiKey,
-                secret: secret,
-                passphrase: passphrase,
-            };
+            // Local credentials
             builderConfig = new BuilderConfig({
-                localBuilderCreds: builderCreds,
+                localBuilderCreds: {
+                    key: apiKey,
+                    secret: secret,
+                    passphrase: passphrase,
+                },
             });
         }
 
-        // 6. Initialize Relay Client
+        // 7. Initialize Relay Client
         // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
-        // Note: chainId is already defined above (line 155)
         const relayerUrl = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
-
-        // @ts-ignore - Dynamic constructor
-        const client = new ClientConstructor(
+        
+        const client = new RelayClient(
             relayerUrl,
-            chainId, // Use chainId from line 155
+            chainId,
             wallet,
             builderConfig
         );
 
-        // Debug: Log all available methods on the client
-        console.log('[Relayer] Client instance created. Available methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(client)).filter(name => name !== 'constructor'));
-        console.log('[Relayer] Client instance keys:', Object.keys(client));
-
-        console.log('[Relayer] Executing transactions:', {
-            transactionCount: transactions?.length,
-            metadata,
-            userAddress
+        console.log('[Relayer] Client initialized:', {
+            relayerUrl,
+            chainId,
+            userAddress,
+            hasRemoteSigning: !!signingServerUrl,
         });
 
-        // 7. Get expected Safe wallet address and check if deployed
-        // Per Polymarket docs: Safe wallet address is deterministic from EOA address
-        let expectedSafeAddress: string | null = null;
-        if (typeof client.getExpectedSafe === 'function') {
-            try {
-                expectedSafeAddress = await client.getExpectedSafe();
-                console.log('[Relayer] Expected Safe wallet address:', expectedSafeAddress);
-            } catch (error) {
-                console.log('[Relayer] Could not get expected Safe address:', error);
-            }
-        }
-
-        // Check if Safe wallet is deployed, deploy if not
+        // 8. Check and deploy Safe wallet if needed
         // Per Polymarket docs: Safe wallet must be deployed before executing transactions
-        // CRITICAL: getDeployed() uses wallet.address internally, which we've set to userAddress
-        let safeDeployed = false;
-        let deployedAddress: string | null = null;
-        if (typeof client.getDeployed === 'function') {
-            try {
-                // getDeployed() uses wallet.address to find the Safe wallet
-                // We've set wallet.address = userAddress, so this should work
-                const deployed = await client.getDeployed();
-                deployedAddress = deployed;
-                safeDeployed = !!deployed && deployed !== null && deployed !== '0x0000000000000000000000000000000000000000';
-                console.log('[Relayer] Safe wallet deployment status:', { 
-                    deployed: safeDeployed, 
-                    address: deployed,
-                    expectedAddress: expectedSafeAddress,
-                    userAddress: userAddress,
-                    walletAddress: wallet.address // Should match userAddress
-                });
-            } catch (error: any) {
-                // getDeployed might fail if Safe is not deployed yet - this is OK
-                console.log('[Relayer] Safe wallet not deployed yet (this is OK for first-time users):', error.message || error);
-                safeDeployed = false;
-                deployedAddress = null;
+        let safeAddress: string | null = null;
+        
+        try {
+            // Check if Safe is deployed
+            if (typeof client.getDeployed === 'function') {
+                safeAddress = await client.getDeployed();
             }
+        } catch (error: any) {
+            // Safe not deployed yet - this is OK for first-time users
+            console.log('[Relayer] Safe wallet not deployed yet:', error.message);
         }
 
         // Deploy Safe wallet if not deployed
-        if (!safeDeployed) {
-            console.log('[Relayer] Safe wallet not deployed. Deploying now for user:', userAddress);
+        if (!safeAddress) {
+            console.log('[Relayer] Deploying Safe wallet for user:', userAddress);
+            
             if (typeof client.deploy === 'function') {
-                try {
-                    const deployResponse = await client.deploy();
-                    const deployResult = await deployResponse.wait();
-                    if (deployResult && deployResult.proxyAddress) {
-                        console.log('[Relayer] Safe wallet deployed successfully:', {
-                            transactionHash: deployResult.transactionHash,
-                            safeAddress: deployResult.proxyAddress,
-                            userEOA: userAddress,
-                            matchesExpected: deployResult.proxyAddress.toLowerCase() === expectedSafeAddress?.toLowerCase()
-                        });
-                        safeDeployed = true;
-                    } else {
-                        throw new Error('Safe deployment failed - no proxy address returned');
-                    }
-                } catch (deployError: any) {
-                    console.error('[Relayer] Failed to deploy Safe wallet:', deployError);
-                    throw new Error(`Safe wallet deployment failed: ${deployError.message || 'Unknown error'}`);
+                const deployResponse = await client.deploy();
+                const deployResult = await deployResponse.wait();
+                
+                if (deployResult?.proxyAddress) {
+                    safeAddress = deployResult.proxyAddress;
+                    console.log('[Relayer] Safe wallet deployed:', {
+                        transactionHash: deployResult.transactionHash,
+                        safeAddress: safeAddress,
+                    });
+                } else {
+                    throw new Error('Safe deployment failed - no proxy address returned');
                 }
             } else {
-                throw new Error('Safe wallet not deployed and deploy method not available');
+                throw new Error('deploy method not available on RelayClient');
             }
+        } else {
+            console.log('[Relayer] Safe wallet already deployed:', safeAddress);
         }
 
-        // 8. Execute transactions
+        // 9. Execute transactions
         // Per Polymarket docs: Use execute method for Safe transactions
         let response;
+        
         if (typeof client.execute === 'function') {
-            console.log('[Relayer] Using execute method');
-            response = await client.execute(
-                transactions,
-                metadata || 'Gasless transaction'
-            );
+            response = await client.execute(transactions, metadata || 'Gasless transaction');
         } else if (typeof client.executeSafeTransactions === 'function') {
-            console.log('[Relayer] Using executeSafeTransactions method');
-            response = await client.executeSafeTransactions(
-                transactions,
-                metadata || 'Gasless transaction'
-            );
-        } else if (typeof client.executeTransactions === 'function') {
-            console.log('[Relayer] Using executeTransactions method');
-            response = await client.executeTransactions(
-                transactions,
-                metadata || 'Gasless transaction'
-            );
+            // @ts-ignore - Method exists but may not be in type definitions
+            response = await client.executeSafeTransactions(transactions, metadata || 'Gasless transaction');
         } else {
-            // List all available methods for debugging
-            const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(client))
-                .filter(name => typeof client[name] === 'function' && name !== 'constructor');
-            throw new Error(`No execute method found. Available methods: ${methods.join(', ')}`);
+            throw new Error('No execute method found on RelayClient');
         }
 
+        // 10. Wait for transaction confirmation
         console.log('[Relayer] Transaction submitted, waiting for confirmation...');
         const result = await response.wait();
 
-        console.log('[Relayer] Success:', {
+        console.log('[Relayer] Transaction confirmed:', {
             transactionID: result?.transactionID,
             transactionHash: result?.transactionHash,
             state: result?.state,
-            proxyAddress: result?.proxyAddress
+            proxyAddress: result?.proxyAddress || safeAddress,
         });
 
         return NextResponse.json({
             transactionID: result?.transactionID,
             transactionHash: result?.transactionHash,
             state: result?.state,
-            proxyAddress: result?.proxyAddress
+            proxyAddress: result?.proxyAddress || safeAddress,
         });
 
     } catch (error: any) {
         console.error('[Relayer] Error:', {
             message: error.message,
-            stack: error.stack
+            stack: error.stack,
         });
 
         return NextResponse.json(
-            { error: error.message || 'Relayer request failed' },
+            { 
+                error: error.message || 'Relayer request failed',
+                details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            },
             { status: 500 }
         );
     }
