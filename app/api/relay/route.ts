@@ -144,21 +144,75 @@ export async function POST(request: NextRequest) {
         });
 
         // 4. Create a wallet for RelayClient constructor
-        // CRITICAL: Must use user's EOA address, not random wallet
-        // Per Polymarket docs: Safe wallet is tied to the EOA address
-        // RelayClient uses the wallet address to find/deploy the correct Safe wallet
+        // CRITICAL: Per Polymarket docs and lib/polymarket/relayerClient.ts pattern
+        // SDK needs a Wallet/Signer with proper provider that has network config
+        // The wallet address identifies the Safe wallet, but we use user's address
         if (!userAddress) {
             throw new Error('User address is required for Safe wallet operations');
         }
         
         const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
-        const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+        const chainId = 137; // Polygon mainnet
         
-        // Create a VoidSigner from user's EOA address
-        // This allows RelayClient to identify the correct Safe wallet for this user
-        // VoidSigner can't sign but satisfies the constructor requirement
-        // @ts-ignore - VoidSigner satisfies the interface but TypeScript doesn't recognize it
-        const wallet = new ethers.VoidSigner(userAddress, provider) as any;
+        // CRITICAL: Per Polymarket SDK and lib/polymarket/relayerClient.ts pattern
+        // SDK uses viem internally, but accepts ethers Signer
+        // The signer must have a provider with proper network config
+        // We need to create a signer that matches the pattern in relayerClient.ts
+        
+        // Create provider with network configuration
+        const network = ethers.providers.getNetwork(chainId);
+        const provider = new ethers.providers.JsonRpcProvider(rpcUrl, network);
+        
+        // CRITICAL: SDK internally uses viem which expects provider.config
+        // But ethers provider doesn't have config. We need to create a compatible signer
+        // Per lib/polymarket/relayerClient.ts: walletClientToSigner creates Web3Provider from window.ethereum
+        // But in server-side, we don't have window.ethereum
+        // Solution: Create a JsonRpcSigner-like object that SDK can use
+        
+        // Create a wallet with user's address
+        // SDK uses wallet.address to identify Safe wallet
+        // We create a random wallet and override address to user's EOA
+        const tempWallet = ethers.Wallet.createRandom();
+        const wallet = tempWallet.connect(provider);
+        
+        // Override address to user's EOA (SDK uses this to find Safe wallet)
+        // @ts-ignore - Overriding read-only property for SDK compatibility
+        Object.defineProperty(wallet, 'address', {
+            value: userAddress,
+            writable: false,
+            configurable: true,
+        });
+        
+        // CRITICAL: SDK expects provider to have config property (viem format)
+        // Add config to provider for SDK compatibility
+        // @ts-ignore - Adding config property for SDK compatibility
+        if (!provider.config) {
+            // @ts-ignore
+            provider.config = {
+                chain: {
+                    id: chainId,
+                    name: 'polygon',
+                    network: 'polygon',
+                    nativeCurrency: {
+                        name: 'MATIC',
+                        symbol: 'MATIC',
+                        decimals: 18,
+                    },
+                    rpcUrls: {
+                        default: {
+                            http: [rpcUrl],
+                        },
+                    },
+                },
+            };
+        }
+        
+        console.log('[Relayer] Wallet created for user:', {
+            userAddress,
+            walletAddress: wallet.address,
+            providerNetwork: provider.network?.chainId,
+            providerHasConfig: !!provider.config
+        });
 
         // 5. Initialize Builder Config
         // Per Polymarket docs: Support both remote and local builder credentials
@@ -226,21 +280,28 @@ export async function POST(request: NextRequest) {
 
         // Check if Safe wallet is deployed, deploy if not
         // Per Polymarket docs: Safe wallet must be deployed before executing transactions
+        // CRITICAL: getDeployed() uses wallet.address internally, which we've set to userAddress
         let safeDeployed = false;
+        let deployedAddress: string | null = null;
         if (typeof client.getDeployed === 'function') {
             try {
+                // getDeployed() uses wallet.address to find the Safe wallet
+                // We've set wallet.address = userAddress, so this should work
                 const deployed = await client.getDeployed();
-                safeDeployed = !!deployed;
+                deployedAddress = deployed;
+                safeDeployed = !!deployed && deployed !== null && deployed !== '0x0000000000000000000000000000000000000000';
                 console.log('[Relayer] Safe wallet deployment status:', { 
                     deployed: safeDeployed, 
                     address: deployed,
                     expectedAddress: expectedSafeAddress,
-                    userAddress: userAddress
+                    userAddress: userAddress,
+                    walletAddress: wallet.address // Should match userAddress
                 });
             } catch (error: any) {
                 // getDeployed might fail if Safe is not deployed yet - this is OK
                 console.log('[Relayer] Safe wallet not deployed yet (this is OK for first-time users):', error.message || error);
                 safeDeployed = false;
+                deployedAddress = null;
             }
         }
 

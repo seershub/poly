@@ -248,16 +248,46 @@ export async function getOrderBook(
 
 /**
  * Get user orders
+ * Per Polymarket docs: Use CLOB API to fetch user's orders
  */
 export async function getUserOrders(
   clobClient: ClobClient,
   address: string
 ) {
   try {
-    // Note: The CLOB client API for fetching user orders may vary
-    // For now, returning empty array. This can be implemented later
-    // using the correct API endpoint
-    return [];
+    // Per Polymarket CLOB API: Use getOrders method with user address
+    // @ts-ignore - Method exists but may not be in type definitions
+    if (typeof clobClient.getOrders === 'function') {
+      const orders = await clobClient.getOrders(address);
+      return orders || [];
+    }
+    
+    // Fallback: Try alternative method names
+    // @ts-ignore
+    if (typeof clobClient.getUserOrders === 'function') {
+      // @ts-ignore
+      const orders = await clobClient.getUserOrders(address);
+      return orders || [];
+    }
+    
+    // Fallback: Use HTTP request directly
+    const CLOB_API_URL = process.env.NEXT_PUBLIC_CLOB_API_URL || 'https://clob.polymarket.com';
+    const axios = (await import('axios')).default;
+    
+    try {
+      const response = await axios.get(`${CLOB_API_URL}/orders`, {
+        params: {
+          maker: address.toLowerCase(),
+        },
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      return response.data || [];
+    } catch (httpError) {
+      console.error('Error fetching orders via HTTP:', httpError);
+      return [];
+    }
   } catch (error) {
     console.error('Error fetching user orders:', error);
     return [];
@@ -282,16 +312,87 @@ export async function cancelOrder(
 }
 
 /**
+ * Get user trades
+ * Per Polymarket docs: Use CLOB API to fetch user's trade history
+ */
+export async function getUserTrades(
+  clobClient: ClobClient,
+  address: string
+) {
+  try {
+    // Per Polymarket CLOB API: Use getTrades method with user address
+    // @ts-ignore - Method exists but may not be in type definitions
+    if (typeof clobClient.getTrades === 'function') {
+      const trades = await clobClient.getTrades(address);
+      return trades || [];
+    }
+    
+    // Fallback: Try alternative method names
+    // @ts-ignore
+    if (typeof clobClient.getUserTrades === 'function') {
+      // @ts-ignore
+      const trades = await clobClient.getUserTrades(address);
+      return trades || [];
+    }
+    
+    // Fallback: Use HTTP request directly
+    const CLOB_API_URL = process.env.NEXT_PUBLIC_CLOB_API_URL || 'https://clob.polymarket.com';
+    const axios = (await import('axios')).default;
+    
+    try {
+      const response = await axios.get(`${CLOB_API_URL}/trades`, {
+        params: {
+          maker: address.toLowerCase(),
+        },
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      return response.data || [];
+    } catch (httpError) {
+      console.error('Error fetching trades via HTTP:', httpError);
+      return [];
+    }
+  } catch (error) {
+    console.error('Error fetching user trades:', error);
+    return [];
+  }
+}
+
+/**
  * Get market trades
- * Note: This functionality can be implemented when needed
+ * Per Polymarket docs: Get recent trades for a specific market
  */
 export async function getMarketTrades(
   clobClient: ClobClient,
   tokenId: string
 ) {
   try {
-    // Implementation depends on the correct CLOB API method
-    return [];
+    // Per Polymarket CLOB API: Use getTrades method with tokenId
+    // @ts-ignore - Method exists but may not be in type definitions
+    if (typeof clobClient.getTrades === 'function') {
+      const trades = await clobClient.getTrades(tokenId);
+      return trades || [];
+    }
+    
+    // Fallback: Use HTTP request directly
+    const CLOB_API_URL = process.env.NEXT_PUBLIC_CLOB_API_URL || 'https://clob.polymarket.com';
+    const axios = (await import('axios')).default;
+    
+    try {
+      const response = await axios.get(`${CLOB_API_URL}/trades`, {
+        params: {
+          token_id: tokenId,
+        },
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      return response.data || [];
+    } catch (httpError) {
+      console.error('Error fetching market trades via HTTP:', httpError);
+      return [];
+    }
   } catch (error) {
     console.error('Error fetching market trades:', error);
     return [];
