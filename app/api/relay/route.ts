@@ -211,7 +211,8 @@ export async function POST(request: NextRequest) {
             userAddress,
             walletAddress: wallet.address,
             providerNetwork: provider.network?.chainId,
-            providerHasConfig: !!provider.config
+            // @ts-ignore - config is added dynamically for SDK compatibility
+            providerHasConfig: !!(provider as any).config
         });
 
         // 5. Initialize Builder Config
