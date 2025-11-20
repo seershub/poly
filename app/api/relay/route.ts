@@ -114,16 +114,16 @@ export async function POST(request: NextRequest) {
             relayClientName: ClientConstructor.name || 'anonymous'
         });
 
-        // 4. Create a signer for RelayClient constructor
+        // 4. Create a wallet for RelayClient constructor
         // Note: Polymarket Relayer uses the user's proxy wallet for actual execution
-        // The signer here is just for constructor initialization - Relayer handles actual signing
+        // The wallet here is just for constructor initialization - Relayer handles actual signing
+        // Per Polymarket docs: RelayClient requires a Wallet or Signer, but Relayer uses proxy wallet for execution
         const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-rpc.com';
         const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
         
-        // Use userAddress if provided, otherwise use a placeholder address
-        // VoidSigner is a read-only signer that can't sign but satisfies the constructor
-        const signerAddress = userAddress || ethers.Wallet.createRandom().address;
-        const signer = new ethers.VoidSigner(signerAddress, provider);
+        // Create a random wallet for constructor (Relayer uses user's proxy wallet for actual execution)
+        // This wallet is only used for constructor initialization, not for signing transactions
+        const wallet = ethers.Wallet.createRandom().connect(provider);
 
         // 5. Initialize Builder Config
         // Per Polymarket docs: BuilderConfig with localBuilderCreds
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
         const client = new ClientConstructor(
             relayerUrl,
             chainId,
-            signer,
+            wallet,
             builderConfig
         );
 
