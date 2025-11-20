@@ -245,13 +245,13 @@ export async function POST(request: NextRequest) {
 
         // 6. Initialize Relay Client
         // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)
+        // Note: chainId is already defined above (line 155)
         const relayerUrl = process.env.NEXT_PUBLIC_POLYMARKET_RELAYER_URL || 'https://relayer-v2.polymarket.com';
-        const chainId = 137; // Polygon mainnet
 
         // @ts-ignore - Dynamic constructor
         const client = new ClientConstructor(
             relayerUrl,
-            chainId,
+            chainId, // Use chainId from line 155
             wallet,
             builderConfig
         );
