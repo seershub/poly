@@ -58,38 +58,67 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // 3. Find RelayClient constructor (same pattern as lib/polymarket/relayerClient.ts)
+        // 3. Find RelayClient constructor
+        // Per Polymarket SDK: The module uses default export, so RelayClient is in default
         // @ts-ignore - Dynamic module inspection
-        let ClientConstructor = RelayerModule.RelayClient;
-
-        if (!ClientConstructor || typeof ClientConstructor !== 'function') {
+        let ClientConstructor: any = null;
+        
+        // Log module structure for debugging
+        console.log('[Relayer] Module keys:', Object.keys(RelayerModule));
+        if (RelayerModule.default) {
+            console.log('[Relayer] Default export keys:', Object.keys(RelayerModule.default));
+        }
+        
+        // Try named export first
+        // @ts-ignore
+        if (RelayerModule.RelayClient && typeof RelayerModule.RelayClient === 'function') {
+            ClientConstructor = RelayerModule.RelayClient;
+            console.log('[Relayer] Found RelayClient as named export');
+        }
+        // Try default export (most common case)
+        else if (RelayerModule.default) {
             // @ts-ignore
-            if (RelayerModule.default) {
+            if (RelayerModule.default.RelayClient && typeof RelayerModule.default.RelayClient === 'function') {
                 // @ts-ignore
-                ClientConstructor = RelayerModule.default.RelayClient || RelayerModule.default;
+                ClientConstructor = RelayerModule.default.RelayClient;
+                console.log('[Relayer] Found RelayClient at default.RelayClient');
+            }
+            // Default export might be RelayClient itself
+            // @ts-ignore
+            else if (typeof RelayerModule.default === 'function') {
+                // @ts-ignore
+                ClientConstructor = RelayerModule.default;
+                console.log('[Relayer] Found RelayClient as default export');
             }
         }
 
-        // Brute force search for RelayClient if still not found
-        if (typeof ClientConstructor !== 'function') {
+        // Brute force search if still not found
+        if (!ClientConstructor || typeof ClientConstructor !== 'function') {
             console.log('[Relayer] Searching for RelayClient constructor in module exports...');
             for (const key in RelayerModule) {
                 // @ts-ignore
                 const exportVal = RelayerModule[key];
-                if (typeof exportVal === 'function' && (exportVal.name === 'RelayClient' || key === 'RelayClient')) {
-                    console.log(`[Relayer] Found RelayClient at RelayerModule.${key}`);
-                    ClientConstructor = exportVal;
-                    break;
+                if (typeof exportVal === 'function') {
+                    // Check function name or key name
+                    // @ts-ignore
+                    if (exportVal.name === 'RelayClient' || key === 'RelayClient') {
+                        console.log(`[Relayer] Found RelayClient at RelayerModule.${key}`);
+                        ClientConstructor = exportVal;
+                        break;
+                    }
                 }
-                // Search inside default
+                // Search inside default object
                 if (key === 'default' && typeof exportVal === 'object' && exportVal !== null) {
                     for (const subKey in exportVal) {
                         // @ts-ignore
                         const subExport = exportVal[subKey];
-                        if (typeof subExport === 'function' && (subExport.name === 'RelayClient' || subKey === 'RelayClient')) {
-                            console.log(`[Relayer] Found RelayClient at RelayerModule.default.${subKey}`);
-                            ClientConstructor = subExport;
-                            break;
+                        if (typeof subExport === 'function') {
+                            // @ts-ignore
+                            if (subExport.name === 'RelayClient' || subKey === 'RelayClient') {
+                                console.log(`[Relayer] Found RelayClient at RelayerModule.default.${subKey}`);
+                                ClientConstructor = subExport;
+                                break;
+                            }
                         }
                     }
                 }
@@ -126,15 +155,29 @@ export async function POST(request: NextRequest) {
         const wallet = ethers.Wallet.createRandom().connect(provider);
 
         // 5. Initialize Builder Config
-        // Per Polymarket docs: BuilderConfig with localBuilderCreds
-        const builderCreds = {
-            key: apiKey,
-            secret: secret,
-            passphrase: passphrase,
-        };
-        const builderConfig = new BuilderConfig({
-            localBuilderCreds: builderCreds,
-        });
+        // Per Polymarket docs: Support both remote and local builder credentials
+        // Priority: Remote signing server (more secure) > Local credentials
+        const signingServerUrl = process.env.NEXT_PUBLIC_BUILDER_SIGNING_SERVER_URL;
+        
+        let builderConfig;
+        if (signingServerUrl) {
+            // Use remote signing server (RECOMMENDED - more secure)
+            console.log('[Relayer] Using remote builder signing server:', signingServerUrl);
+            builderConfig = new BuilderConfig({
+                remoteBuilderConfig: { url: signingServerUrl },
+            });
+        } else {
+            // Use local credentials (fallback)
+            console.log('[Relayer] Using local builder credentials');
+            const builderCreds = {
+                key: apiKey,
+                secret: secret,
+                passphrase: passphrase,
+            };
+            builderConfig = new BuilderConfig({
+                localBuilderCreds: builderCreds,
+            });
+        }
 
         // 6. Initialize Relay Client
         // Per Polymarket docs: RelayClient(relayerUrl, chainId, wallet, builderConfig)

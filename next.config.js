@@ -5,11 +5,9 @@ const nextConfig = {
     config.resolve.fallback = { fs: false, net: false, tls: false };
     config.externals.push('pino-pretty', 'encoding');
     
-    // Make @polymarket/builder-relayer-client optional to prevent build errors
-    // This package may not be installed, but the code handles it gracefully at runtime
+    // Only alias packages that are truly not needed for web
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@polymarket/builder-relayer-client': false,
       // Ignore @react-native-async-storage/async-storage (not needed for web)
       '@react-native-async-storage/async-storage': false,
     };
