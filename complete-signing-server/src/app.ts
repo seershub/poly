@@ -46,7 +46,31 @@ export function createApp(signer: BuilderSigner, authorizationToken?: string): E
      * Health endpoint
      */
     app.get('/', (_req: Request, res: Response) => {
-        res.status(200).json({"data": 'OK'});
+        res.status(200).json({
+            "status": "OK",
+            "service": "Polymarket Builder Signing Server",
+            "endpoints": {
+                "POST /sign": "Sign builder authentication headers",
+                "GET /": "Health check"
+            }
+        });
+    });
+
+    /**
+     * Health check for /sign endpoint (GET request for testing)
+     */
+    app.get('/sign', (_req: Request, res: Response) => {
+        res.status(200).json({
+            "status": "OK",
+            "endpoint": "/sign",
+            "method": "POST",
+            "description": "This endpoint requires POST method. Use POST to sign builder headers.",
+            "example": {
+                "path": "/api/v1/orders",
+                "method": "POST",
+                "body": "{\"tokenId\":\"...\",\"side\":\"BUY\"}"
+            }
+        });
     });
 
     /**

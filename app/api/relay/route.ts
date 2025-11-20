@@ -162,9 +162,13 @@ export async function POST(request: NextRequest) {
         let builderConfig;
         if (signingServerUrl) {
             // Use remote signing server (RECOMMENDED - more secure)
-            console.log('[Relayer] Using remote builder signing server:', signingServerUrl);
+            // Ensure URL ends with /sign if not already
+            const signingUrl = signingServerUrl.endsWith('/sign') 
+                ? signingServerUrl 
+                : `${signingServerUrl.replace(/\/$/, '')}/sign`;
+            console.log('[Relayer] Using remote builder signing server:', signingUrl);
             builderConfig = new BuilderConfig({
-                remoteBuilderConfig: { url: signingServerUrl },
+                remoteBuilderConfig: { url: signingUrl },
             });
         } else {
             // Use local credentials (fallback)
@@ -192,6 +196,10 @@ export async function POST(request: NextRequest) {
             builderConfig
         );
 
+        // Debug: Log all available methods on the client
+        console.log('[Relayer] Client instance created. Available methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(client)).filter(name => name !== 'constructor'));
+        console.log('[Relayer] Client instance keys:', Object.keys(client));
+
         console.log('[Relayer] Executing transactions:', {
             transactionCount: transactions?.length,
             metadata,
@@ -199,13 +207,32 @@ export async function POST(request: NextRequest) {
         });
 
         // 7. Execute transactions
-        // Per Polymarket docs: Use executeSafeTransactions for Safe transactions
-        // The transactions array contains SafeTransaction objects
-        // @ts-ignore - Type definitions may be outdated, but method exists at runtime
-        const response = await client.executeSafeTransactions(
-            transactions,
-            metadata || 'Gasless transaction'
-        );
+        // Try different method names - SDK might use different naming
+        let response;
+        if (typeof client.executeSafeTransactions === 'function') {
+            console.log('[Relayer] Using executeSafeTransactions method');
+            response = await client.executeSafeTransactions(
+                transactions,
+                metadata || 'Gasless transaction'
+            );
+        } else if (typeof client.execute === 'function') {
+            console.log('[Relayer] Using execute method');
+            response = await client.execute(
+                transactions,
+                metadata || 'Gasless transaction'
+            );
+        } else if (typeof client.executeTransactions === 'function') {
+            console.log('[Relayer] Using executeTransactions method');
+            response = await client.executeTransactions(
+                transactions,
+                metadata || 'Gasless transaction'
+            );
+        } else {
+            // List all available methods for debugging
+            const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(client))
+                .filter(name => typeof client[name] === 'function' && name !== 'constructor');
+            throw new Error(`No execute method found. Available methods: ${methods.join(', ')}`);
+        }
 
         console.log('[Relayer] Waiting for confirmation...');
         const result = await response.wait();
