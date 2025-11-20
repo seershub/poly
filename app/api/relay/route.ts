@@ -169,46 +169,26 @@ export async function POST(request: NextRequest) {
         // But in server-side, we don't have window.ethereum
         // Solution: Create a JsonRpcSigner-like object that SDK can use
         
-        // Create a wallet with user's address
-        // SDK uses wallet.address to identify Safe wallet
-        // CRITICAL: We need to create a wallet-like object with user's address
-        // Since ethers.Wallet doesn't allow setting address directly,
-        // we create a proxy that intercepts address access
+        // CRITICAL: Per Polymarket docs, RelayClient needs a Signer/Wallet
+        // But in server-side, we only have userAddress, not a real wallet
+        // SDK uses wallet.address to identify the Safe wallet for the user
+        // 
+        // Solution: Create a minimal signer-like object that satisfies SDK requirements
+        // SDK only needs:
+        // 1. wallet.address - to identify which Safe wallet to use
+        // 2. wallet.provider - for network configuration
+        // 3. Signing is handled by Builder credentials, not the wallet
         
-        // Create a random wallet for the signer functionality
-        const tempWallet = ethers.Wallet.createRandom();
-        const baseWallet = tempWallet.connect(provider);
-        
-        // Create a proxy that intercepts address property access
-        // This allows SDK to read wallet.address and get userAddress
-        const wallet = new Proxy(baseWallet, {
-            get(target, prop) {
-                if (prop === 'address') {
-                    return userAddress;
-                }
-                return (target as any)[prop];
-            },
-            has(target, prop) {
-                if (prop === 'address') {
-                    return true;
-                }
-                return prop in target;
-            },
-            ownKeys(target) {
-                return [...Reflect.ownKeys(target), 'address'];
-            },
-            getOwnPropertyDescriptor(target, prop) {
-                if (prop === 'address') {
-                    return {
-                        value: userAddress,
-                        writable: false,
-                        enumerable: true,
-                        configurable: true,
-                    };
-                }
-                return Reflect.getOwnPropertyDescriptor(target, prop);
-            },
-        }) as typeof baseWallet;
+        // Create a minimal wallet-like object
+        // We don't need actual signing capability since Builder credentials handle that
+        const wallet = {
+            address: userAddress,
+            provider: provider,
+            // Add minimal signer interface methods (SDK might check for these)
+            getAddress: () => Promise.resolve(userAddress),
+            // @ts-ignore - SDK compatibility
+            _isSigner: true,
+        } as any;
         
         // CRITICAL: SDK expects provider to have config property (viem format)
         // Add config to provider for SDK compatibility
