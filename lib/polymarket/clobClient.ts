@@ -257,16 +257,17 @@ export async function getUserOrders(
   try {
     // Per Polymarket CLOB API: Use getOrders method with user address
     // @ts-ignore - Method exists but may not be in type definitions
-    if (typeof clobClient.getOrders === 'function') {
-      const orders = await clobClient.getOrders(address);
+    if (typeof (clobClient as any).getOrders === 'function') {
+      // @ts-ignore - Method exists but may not be in type definitions
+      const orders = await (clobClient as any).getOrders(address);
       return orders || [];
     }
     
     // Fallback: Try alternative method names
-    // @ts-ignore
-    if (typeof clobClient.getUserOrders === 'function') {
-      // @ts-ignore
-      const orders = await clobClient.getUserOrders(address);
+    // @ts-ignore - Method exists but may not be in type definitions
+    if (typeof (clobClient as any).getUserOrders === 'function') {
+      // @ts-ignore - Method exists but may not be in type definitions
+      const orders = await (clobClient as any).getUserOrders(address);
       return orders || [];
     }
     
@@ -322,16 +323,17 @@ export async function getUserTrades(
   try {
     // Per Polymarket CLOB API: Use getTrades method with user address
     // @ts-ignore - Method exists but may not be in type definitions
-    if (typeof clobClient.getTrades === 'function') {
-      const trades = await clobClient.getTrades(address);
+    if (typeof (clobClient as any).getTrades === 'function') {
+      // @ts-ignore - Method exists but may not be in type definitions
+      const trades = await (clobClient as any).getTrades(address);
       return trades || [];
     }
     
     // Fallback: Try alternative method names
-    // @ts-ignore
-    if (typeof clobClient.getUserTrades === 'function') {
-      // @ts-ignore
-      const trades = await clobClient.getUserTrades(address);
+    // @ts-ignore - Method exists but may not be in type definitions
+    if (typeof (clobClient as any).getUserTrades === 'function') {
+      // @ts-ignore - Method exists but may not be in type definitions
+      const trades = await (clobClient as any).getUserTrades(address);
       return trades || [];
     }
     
@@ -370,8 +372,9 @@ export async function getMarketTrades(
   try {
     // Per Polymarket CLOB API: Use getTrades method with tokenId
     // @ts-ignore - Method exists but may not be in type definitions
-    if (typeof clobClient.getTrades === 'function') {
-      const trades = await clobClient.getTrades(tokenId);
+    if (typeof (clobClient as any).getTrades === 'function') {
+      // @ts-ignore - Method exists but may not be in type definitions
+      const trades = await (clobClient as any).getTrades(tokenId);
       return trades || [];
     }
     
