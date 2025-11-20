@@ -206,18 +206,56 @@ export async function POST(request: NextRequest) {
             userAddress
         });
 
-        // 7. Execute transactions
-        // Try different method names - SDK might use different naming
+        // 7. Check if Safe wallet is deployed, deploy if not
+        // Per Polymarket docs: Safe wallet must be deployed before executing transactions
+        let safeDeployed = false;
+        if (typeof client.getDeployed === 'function') {
+            try {
+                const deployed = await client.getDeployed();
+                safeDeployed = !!deployed;
+                console.log('[Relayer] Safe wallet deployment status:', { deployed: safeDeployed, address: deployed });
+            } catch (error) {
+                console.log('[Relayer] Could not check Safe deployment status:', error);
+            }
+        }
+
+        // Deploy Safe wallet if not deployed
+        if (!safeDeployed) {
+            console.log('[Relayer] Safe wallet not deployed. Deploying now...');
+            if (typeof client.deploy === 'function') {
+                try {
+                    const deployResponse = await client.deploy();
+                    const deployResult = await deployResponse.wait();
+                    if (deployResult && deployResult.proxyAddress) {
+                        console.log('[Relayer] Safe wallet deployed successfully:', {
+                            transactionHash: deployResult.transactionHash,
+                            safeAddress: deployResult.proxyAddress
+                        });
+                        safeDeployed = true;
+                    } else {
+                        throw new Error('Safe deployment failed - no proxy address returned');
+                    }
+                } catch (deployError: any) {
+                    console.error('[Relayer] Failed to deploy Safe wallet:', deployError);
+                    throw new Error(`Safe wallet deployment failed: ${deployError.message || 'Unknown error'}`);
+                }
+            } else {
+                throw new Error('Safe wallet not deployed and deploy method not available');
+            }
+        }
+
+        // 8. Execute transactions
+        // Per Polymarket docs: Use execute method for Safe transactions
         let response;
-        if (typeof client.executeSafeTransactions === 'function') {
-            console.log('[Relayer] Using executeSafeTransactions method');
-            response = await client.executeSafeTransactions(
+        if (typeof client.execute === 'function') {
+            console.log('[Relayer] Using execute method');
+            response = await client.execute(
                 transactions,
                 metadata || 'Gasless transaction'
             );
-        } else if (typeof client.execute === 'function') {
-            console.log('[Relayer] Using execute method');
-            response = await client.execute(
+        } else if (typeof client.executeSafeTransactions === 'function') {
+            console.log('[Relayer] Using executeSafeTransactions method');
+            response = await client.executeSafeTransactions(
                 transactions,
                 metadata || 'Gasless transaction'
             );
@@ -234,7 +272,7 @@ export async function POST(request: NextRequest) {
             throw new Error(`No execute method found. Available methods: ${methods.join(', ')}`);
         }
 
-        console.log('[Relayer] Waiting for confirmation...');
+        console.log('[Relayer] Transaction submitted, waiting for confirmation...');
         const result = await response.wait();
 
         console.log('[Relayer] Success:', {
